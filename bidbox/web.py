@@ -24,7 +24,7 @@ from bidbox.connectors.redaction import redact
 
 
 from bidbox.data import data_status, get_process, search_processes
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,6 +59,8 @@ async def validation_error(request, exc):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request, exc):
+    if exc.status_code == 404 and not request.url.path.startswith("/api/") and "text/html" in request.headers.get("accept", "text/html"):
+        return FileResponse(PUBLIC_DIR / "404.html", status_code=404)
     return PublicJSON({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
 
 
@@ -222,10 +224,50 @@ def landing_page() -> FileResponse:
     return FileResponse(PUBLIC_DIR / "landing.html")
 
 
-@app.get("/app")
-@app.get("/app/")
-def index() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "index.html")
+SPACES = {
+    "app": ("index.html", r"|review/[^/]+|records/.+|process/.+|approvals|approvals/[^/]+(/[^/]+)?|reports|reports/[^/]+|data"),
+    "connect": ("connect.html", r"|new|status|architecture|[a-z0-9][a-z0-9_-]{0,63}"),
+    "developers": ("developers.html", r"|manifest|cli|api|samples"),
+}
+OLD_PATHS = {
+    "/connectors": "/connect", "/connectors/": "/connect", "/connectors/new": "/connect/new",
+    "/architecture": "/connect/architecture", "/app/admin/connectors": "/connect", "/app/admin/connectors/new": "/connect/new",
+    "/app/admin/integrations": "/connect/status", "/app/admin/economics": "/connect/status",
+    "/app/admin/architecture": "/connect/architecture", "/app/admin/replays": "/app/reports",
+}
+
+
+def space_shell(space: str, path: str = "") -> FileResponse:
+    shell, routes = SPACES[space]
+    if not re.fullmatch(routes, path.strip("/")):
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(PUBLIC_DIR / shell)
+
+
+def old_path_redirect(request: Request) -> RedirectResponse:
+    return RedirectResponse(OLD_PATHS[request.url.path], status_code=301)
+
+
+for _old in OLD_PATHS:
+    app.add_api_route(_old, old_path_redirect, methods=["GET"], include_in_schema=False)
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/{path:path}", include_in_schema=False)
+def index(path: str = "") -> FileResponse:
+    return space_shell("app", path)
+
+
+@app.get("/connect", include_in_schema=False)
+@app.get("/connect/{path:path}", include_in_schema=False)
+def connect_space(path: str = "") -> FileResponse:
+    return space_shell("connect", path)
+
+
+@app.get("/developers", include_in_schema=False)
+@app.get("/developers/{path:path}", include_in_schema=False)
+def developers_space(path: str = "") -> FileResponse:
+    return space_shell("developers", path)
 
 
 @app.get("/api/capabilities")
@@ -645,20 +687,6 @@ def economics():
     return aggregate_economics([run["run_id"] for run in recent_cases()])
 
 
-@app.get("/connectors")
-@app.get("/connectors/")
-def connectors_page() -> FileResponse:
-    target = REPO_ROOT / "app.html"
-    if not target.exists():
-        target = PUBLIC_DIR / "app.html"
-    return FileResponse(target)
-
-
-@app.get("/architecture")
-def architecture_page():
-    return index()
-
-
 @app.get("/api/architecture")
 def architecture():
     from scripts.export_architecture import architecture_svg
@@ -705,6 +733,11 @@ async def security_boundary(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+def unknown_api(path: str):
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="public")

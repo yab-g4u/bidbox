@@ -287,6 +287,6 @@ select { width: 100%; min-height: 48px; color: var(--text); background: var(--su
 .not-published { color: var(--muted); font-style: italic; }
 .raw-ocds { margin-top: 16px; } .raw-ocds pre { overflow: auto; max-height: 420px; font-size: 12px; }
 
-body[data-view="auditor"] [data-role="integrator"] { display: none !important; }
-.view-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-left: auto; }
-.view-switch select { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--surface); color: var(--text); }
+.space-switch { font-size: 13px; color: var(--muted); margin-left: auto; }
+.crumbs { max-width: 760px; margin: 12px auto 0; padding: 0 20px; font-size: 13px; color: var(--muted); }
+.crumbs a { color: inherit; }
