@@ -685,8 +685,17 @@ function renderCurrent() {
   setView(screen);
   document.title = `${shortTitle(data)} · BidBox`;
 }
+const INTEGRATOR_VIEWS = ['economics', 'integrations', 'architecture', 'history'];
+function workspaceView() { return document.body.dataset.view || 'auditor'; }
+function setWorkspaceView(value) {
+  const view = value === 'integrator' ? 'integrator' : 'auditor';
+  document.body.dataset.view = view; $('view-switch').value = view;
+  try { localStorage.setItem('bidbox.view', view); } catch (_) { /* storage unavailable */ }
+}
 async function navigate() {
   const version = ++routeVersion;
+  const target = (location.hash.slice(1) || 'ask').split('/')[0];
+  if (INTEGRATOR_VIEWS.includes(target) && workspaceView() !== 'integrator') { location.hash = 'ask'; return; }
   let parts; try { parts = (location.hash.slice(1) || 'ask').split('/').map(decodeURIComponent); } catch (_) { parts = ['ask']; }
   if (!location.hash && location.pathname === '/architecture') parts = ['architecture'];
   const view = ['ask', 'process', 'records', 'review', 'approval', 'report', 'economics', 'integrations', 'architecture', 'history'].includes(parts[0]) ? parts[0] : 'ask';
@@ -938,5 +947,9 @@ initDither();
 hydrateIcons();
 loadPublisher();
 loadRuns();
+let savedView = 'auditor';
+try { savedView = localStorage.getItem('bidbox.view') || 'auditor'; } catch (_) { /* storage unavailable */ }
+setWorkspaceView(savedView);
+$('view-switch').onchange = event => { setWorkspaceView(event.target.value); if (event.target.value === 'auditor') navigate(); };
 navigate();
 function go(path) { location.hash = path.replace(/^\/app\/?/, ''); }

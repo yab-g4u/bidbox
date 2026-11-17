@@ -16,12 +16,14 @@
       <a class="brand" href="#ask" aria-label="BidBox home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>bidbox<span class="brand-caption">Committee review</span></span></a>
       <nav id="main-nav" aria-label="Main navigation">
         <a href="#ask" data-nav="ask">Review</a>
-        <a href="#economics" data-nav="economics">Economics</a>
-        <a href="#integrations" data-nav="integrations">Integrations</a>
-        <a href="/connectors">Connectors</a>
-        <a href="#architecture" data-nav="architecture">Architecture</a>
-        <a href="#history" data-nav="history">Replay archive</a>
+        <a data-role="integrator" href="#economics" data-nav="economics">Economics</a>
+        <a data-role="integrator" href="#integrations" data-nav="integrations">Integrations</a>
+        <a data-role="integrator" href="/connectors">Connectors</a>
+        <a data-role="integrator" href="#architecture" data-nav="architecture">Architecture</a>
+        <a data-role="integrator" href="#history" data-nav="history">Replay archive</a>
       </nav>
+      <label class="view-switch" title="Demo mode: views, not permissions"><span>Demo mode: views, not permissions</span>
+        <select id="view-switch" aria-label="Workspace view"><option value="auditor">Auditor</option><option value="integrator">Integrator</option></select></label>
       <span id="approval-header" class="header-note" hidden>Independent review</span>
     </div>
   </header>
@@ -175,6 +177,6 @@
     </section>
     <footer class="page-footer"><span>bidbox</span><span>Calm, clear, defensible.</span></footer>
   </main>
-  <aside id="run-counter" class="run-counter" aria-label="Recorded tokens and list-price cost" hidden><span class="counter-label">Recorded usage</span><div><span id="counter-tokens">Not reported</span><span class="counter-divider" aria-hidden="true"></span><span id="counter-cost">Not configured</span></div><a id="counter-link" href="#economics">Cost details <span data-icon="arrow-up-right" aria-hidden="true"></span></a></aside>
+  <aside id="run-counter" class="run-counter" aria-label="Recorded tokens and list-price cost" hidden><span class="counter-label">Recorded usage</span><div><span id="counter-tokens">Not reported</span><span class="counter-divider" aria-hidden="true"></span><span id="counter-cost">Not configured</span></div><a id="counter-link" data-role="integrator" href="#economics">Cost details <span data-icon="arrow-up-right" aria-hidden="true"></span></a></aside>
 </body>
 </html>

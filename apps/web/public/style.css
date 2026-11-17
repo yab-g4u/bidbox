@@ -286,3 +286,7 @@ select { width: 100%; min-height: 48px; color: var(--text); background: var(--su
 .what-is { border: 0; background: none; color: var(--accent); cursor: help; font-size: 12px; margin-left: 6px; padding: 0; }
 .not-published { color: var(--muted); font-style: italic; }
 .raw-ocds { margin-top: 16px; } .raw-ocds pre { overflow: auto; max-height: 420px; font-size: 12px; }
+
+body[data-view="auditor"] [data-role="integrator"] { display: none !important; }
+.view-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-left: auto; }
+.view-switch select { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--surface); color: var(--text); }
