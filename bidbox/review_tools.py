@@ -56,9 +56,10 @@ def cite(process: dict, path: str) -> dict:
             "source_url": process.get("source_url"), "origin": process.get("origin", "live")}
 
 
-def _award_index(record: dict) -> int | None:
-    for index, award in enumerate(record.get("awards") or []):
-        if (award.get("value") or {}).get("amount") is not None or award.get("suppliers"):
+def _award_index(record: dict, field: str) -> int | None:
+    """First award publishing `field` ("value.amount" or "suppliers")."""
+    for index in range(len(record.get("awards") or [])):
+        if present(record, f"awards[{index}].{field}"):
             return index
     return None
 
@@ -91,7 +92,7 @@ def supplier_history(ocid: str, origin: str = "live") -> dict:
     if not process:
         return _cannot("supplier_history", "Process not found in the downloaded records.", None)
     record = process["record"]
-    index = _award_index(record)
+    index = _award_index(record, "suppliers")
     path = f"awards[{index}].suppliers" if index is not None else "awards[0].suppliers"
     suppliers = resolve(record, path) or []
     if not suppliers:
@@ -154,7 +155,7 @@ def price_check(ocid: str, origin: str = "live") -> dict:
     if not process:
         return _cannot("price_check", "Process not found in the downloaded records.", None)
     record = process["record"]
-    index = _award_index(record)
+    index = _award_index(record, "value.amount")
     amount_path = f"awards[{index if index is not None else 0}].value.amount"
     amount = resolve(record, amount_path)
     if amount is None:
@@ -230,7 +231,7 @@ def process_checks(ocid: str, origin: str = "live") -> dict:
         count = resolve(record, "tender.numberOfTenderers")
         observations.append({"code": "TENDERER_COUNT", "category": "process", "severity": "medium" if count == 1 else "info",
                              "message": f"{count} tenderer(s) are published for this process.", "citations": [cite(process, "tender.numberOfTenderers")]})
-    index = _award_index(record)
+    index = _award_index(record, "value.amount")
     award_path = f"awards[{index}].value.amount" if index is not None else None
     if award_path and present(record, award_path) and present(record, "tender.value.amount"):
         award, tender = float(resolve(record, award_path)), float(resolve(record, "tender.value.amount"))
@@ -253,9 +254,9 @@ TOOLS = {"supplier_history": supplier_history, "price_check": price_check, "proc
 def plan_tools(mode: str, record: dict) -> tuple[list[dict], list[dict]]:
     """Choose deterministic tools from the review mode and the fields that exist."""
     wanted = {"price": ["price_check"], "supplier": ["supplier_history"], "both": ["price_check", "supplier_history"]}[mode]
-    index = _award_index(record)
-    award = f"awards[{index if index is not None else 0}]"
-    requirements = {"price_check": f"{award}.value.amount", "supplier_history": f"{award}.suppliers"}
+    requirements = {name: f"awards[{index if index is not None else 0}].{field}"
+                    for name, field in (("price_check", "value.amount"), ("supplier_history", "suppliers"))
+                    for index in [_award_index(record, field)]}
     planned, skipped = [], []
     for name in wanted:
         if present(record, requirements[name]):
