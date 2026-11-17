@@ -75,12 +75,14 @@ def test_uncited_findings_are_dropped(store, monkeypatch):
     async def fake_brief(run_id, process, outputs):
         return "Brief.", [{"code": "LLM_1", "message": "No source", "citations": []},
                           {"code": "LLM_2", "message": "Wrong value", "citations": [{"ocid": "ocds-t-1", "field_path": "awards[0].value.amount", "value": 1}]},
-                          {"code": "LLM_3", "message": "Good", "citations": [{"ocid": "ocds-t-1", "field_path": "tender.procurementMethod", "value": "open"}]}], []
+                          {"code": "LLM_3", "message": "Good", "citations": [{"ocid": "ocds-t-1", "field_path": "buyer.name", "value": "Alpha Water and Sanitation Company"}]},
+                          {"code": "LLM_4", "message": "Repeat", "citations": [{"ocid": "ocds-t-1", "field_path": "tender.procurementMethod", "value": "open"}]}], []
     monkeypatch.setattr(review_agent, "write_brief", fake_brief)
     result = asyncio.run(review_agent.review("run-drop", "ocds-t-1", "price"))
     dropped = {d["finding"]: d["reason"] for d in result["dropped_findings"]}
     assert dropped == {"LLM_1": "dropped: no source", "LLM_2": "dropped: no source"}
-    assert "LLM_3" in {f["code"] for f in result["findings"]}
+    codes = {f["code"] for f in result["findings"]}
+    assert "LLM_3" in codes and "LLM_4" not in codes
 
 
 def test_cannot_benchmark_reports_reason_and_next_check(store):
