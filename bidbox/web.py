@@ -735,6 +735,16 @@ async def security_boundary(request: Request, call_next):
     return response
 
 
+@app.get("/api/connectors/{name}/manifest")
+def connector_manifest(name: str) -> dict:
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", name):
+        raise HTTPException(status_code=404, detail="Connector not found")
+    path = REPO_ROOT / "bidbox" / "connectors" / name / "connector.yaml"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Connector not found")
+    return {"name": name, "yaml": path.read_text(encoding="utf-8")}
+
+
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
 def unknown_api(path: str):
     raise HTTPException(status_code=404, detail="Not Found")
