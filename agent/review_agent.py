@@ -111,6 +111,10 @@ async def review(run_id: str, ocid: str, mode: str, origin: str = "live") -> dic
     drafts = [observation for output in outputs for observation in output["observations"]]
     brief, llm_findings, brief_limits = await write_brief(run_id, process, outputs)
     limitations += brief_limits
+    seen = {(d["message"], tuple(sorted(c.get("field_path") or "" for c in d["citations"]))) for d in drafts}
+    seen_paths = {key[1] for key in seen}
+    llm_findings = [f for f in llm_findings if tuple(sorted(c.get("field_path") or "" for c in f["citations"])) not in seen_paths
+                    and f["message"] not in {key[0] for key in seen}]
     kept, dropped = review_tools.validate_findings(drafts + llm_findings, process["record"])
     filed = [to_filed(finding, process) for finding in kept]
     reason = brief or (f"{len(kept)} cited observation(s) retained." if kept else
