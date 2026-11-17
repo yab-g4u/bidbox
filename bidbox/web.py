@@ -125,6 +125,8 @@ def run_status(report: dict, events: list[dict]) -> str:
 @lru_cache(maxsize=1)
 def fixture_records() -> dict[str, dict]:
     path = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "releases.json"
+    if not path.exists():
+        return {}
     return {record["ocid"]: record for record in json.loads(path.read_text(encoding="utf-8")) if record.get("sandbox", record.get("synthetic"))}
 
 
@@ -540,8 +542,12 @@ def approve(run_id: str, request: ApprovalRequest) -> dict:
 
 class CaseRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    question: str = Field(min_length=1, max_length=2000)
-    ocid: str | None = Field(default=None, max_length=300)
+    question: str | None = Field(default=None, min_length=1, max_length=2000)
+    ocid: str | None = Field(default=None, min_length=1, max_length=300)
+    mode: Literal["price", "supplier", "both"] | None = None
+
+
+MODE_LABELS = {"price": "price", "supplier": "supplier history", "both": "price and supplier history"}
 
 
 @app.get("/health")
@@ -556,6 +562,10 @@ def recent_cases():
 
 @app.post("/api/cases")
 def start_case(body: CaseRequest):
+    if body.ocid and body.mode:
+        return start_mode_review(body.ocid, body.mode)
+    if not body.question:
+        raise HTTPException(status_code=422, detail="Send an exact ocid with a review mode, or a question.")
     matches = cases.candidates(body.question)
     if body.ocid:
         matches = [hit for hit in matches if hit["ocid"] == body.ocid]
@@ -571,6 +581,21 @@ def start_case(body: CaseRequest):
         if sum(run["phase"] in ("queued", "running", "filing") for run in recent_cases()) >= 10:
             raise HTTPException(status_code=429, detail="Review queue is full. Try again after current reviews finish.")
         return PublicJSON({"run_id": cases.create_case(body.question, matches[0])}, status_code=202)
+
+
+def start_mode_review(ocid: str, mode: str):
+    """Button path: exact reference, no free-text search; deterministic tools run even without a model."""
+    process = get_process(ocid)
+    if not process:
+        raise HTTPException(status_code=404, detail="This contract process is not in the downloaded records. No reference guessed.")
+    if not process["award_count"]:
+        return PublicJSON({"status": "tender_stage", "candidates": [{"ocid": ocid}], "detail": "Tender-stage record with no published awards; award review is unavailable."}, status_code=409)
+    with _INTAKE_LOCK:
+        if sum(run["phase"] in ("queued", "running", "filing") for run in recent_cases()) >= 10:
+            raise HTTPException(status_code=429, detail="Review queue is full. Try again after current reviews finish.")
+        selected = {"ocid": ocid, "origin": process["origin"], "title": process.get("title"), "award_count": process["award_count"]}
+        run_id = cases.create_case(f"Review {MODE_LABELS[mode]} for {ocid}", selected, mode)
+    return PublicJSON({"run_id": run_id, "mode": mode}, status_code=202)
 
 
 @app.get("/api/runs/{run_id}/metrics")

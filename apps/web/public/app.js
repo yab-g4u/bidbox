@@ -227,9 +227,9 @@ function renderProcess(process) {
   sourceCard.append(node('p', 'helper', 'Full fiscal-year coverage is not independently established. Differing releases with the same date have no established chronological ordering.'));
   if (awards.length) {
     const choices = node('div', 'download-actions');
-    ['price', 'supplier history', 'price and supplier history'].forEach(check => {
-      const button = node('button', 'button secondary', `Review ${check}`); button.type = 'button';
-      button.onclick = () => startCase(`Review ${check} for ${process.ocid}`, process.ocid, button);
+    [['price', 'price'], ['supplier', 'supplier history'], ['both', 'price and supplier history']].forEach(([mode, check]) => {
+      const button = node('button', 'button secondary', `Review ${check}`); button.type = 'button'; button.dataset.mode = mode;
+      button.onclick = () => startReview(process.ocid, mode, button);
       choices.append(button);
     });
     sourceCard.append(choices);
@@ -351,7 +351,16 @@ function buildTimeline(detail) {
     { title: filed ? 'File created' : 'File creation', done: filed, copy: filed ? 'The recorded review file is available below.' : detail.status === 'rejected' ? 'This decision does not authorize a new file.' : decision ? 'Decision saved. File creation has not been confirmed; the requester’s runner must continue.' : 'No file is created before a named committee decision.' },
   ];
   const plan = events.find(event => event.tool === 'plan');
-  if (plan) steps.unshift({ title: S.plan, done: true, copy: JSON.stringify(plan.outputs) });
+  if (plan?.outputs?.mode) {
+    const toolSteps = [...(plan.outputs.tools || []).map(item => {
+      const ran = events.find(event => event.tool === item.tool && event.outputs?.status);
+      const ok = ran?.outputs?.status === 'ok';
+      return { title: item.tool.replaceAll('_', ' '), done: ok, review: !!ran && !ok, copy: ran ? (ran.outputs.summary || ran.outputs.reason || 'Recorded.') + (ran.outputs.next_check && !ok ? ` Next available check: ${ran.outputs.next_check.replaceAll('_', ' ')}.` : '') : 'Not run yet.' };
+    }), ...(plan.outputs.skipped || []).map(item => ({ title: `${item.tool.replaceAll('_', ' ')} (skipped)`, review: true, copy: item.reason }))];
+    steps.splice(1, 1, ...toolSteps);
+    steps.unshift({ title: `Plan · ${plan.outputs.mode} review`, done: true, copy: plan.outputs.summary });
+    if (detail.review.brief) steps.splice(steps.length - 2, 0, { title: 'Review brief', done: true, copy: detail.review.brief });
+  } else if (plan) steps.unshift({ title: S.plan, done: true, copy: JSON.stringify(plan.outputs) });
   const list = $('timeline'); list.replaceChildren();
   steps.forEach(step => {
     const item = node('li', `timeline-step ${step.done ? 'complete' : step.review ? 'review' : ''}`);
@@ -744,6 +753,16 @@ async function submitDecision() {
   }
 }
 let intakeBusy = false;
+async function startReview(ocid, mode, button) {
+  if (intakeBusy) return;
+  intakeBusy = true; const label = button.textContent; button.disabled = true; button.textContent = S.starting;
+  try {
+    const result = await api('/api/cases', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ocid, mode})});
+    if (!result.run_id) throw new Error(result.detail || 'The review did not start.');
+    await loadRuns(); go(`/app/review/${encodeURIComponent(result.run_id)}`); return;
+  } catch (error) { notice(`${error.message} ${S.unknownOutcome}`, 'review'); }
+  finally { intakeBusy = false; button.disabled = false; button.textContent = label; }
+}
 async function startCase(question, ocid, button) {
   if (intakeBusy) return;
   intakeBusy = true; const label = button.textContent; button.disabled = true; button.textContent = S.starting;
@@ -881,3 +900,4 @@ hydrateIcons();
 loadPublisher();
 loadRuns();
 navigate();
+function go(path) { location.hash = path.replace(/^\/app\/?/, ''); }
