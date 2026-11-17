@@ -99,9 +99,9 @@ def supplier_history(ocid: str, origin: str = "live") -> dict:
         return _cannot("supplier_history", "No supplier is published on this award (awards[].suppliers not published).", "process_checks")
     supplier = suppliers[0]
     supplier_id, supplier_name = supplier.get("id"), supplier.get("name")
-    needle = supplier_name or supplier_id
-    rows = _rows("SELECT ocid, buyer_name, raw_json FROM procurement_records WHERE origin = ? AND award_count > 0 AND contains(raw_json, ?)",
-                 [origin, json.dumps(needle)[1:-1]])
+    needles = [json.dumps(value, ensure_ascii=False)[1:-1] for value in (supplier_name, supplier_id) if value]
+    rows = _rows("SELECT ocid, buyer_name, raw_json FROM procurement_records WHERE origin = ? AND award_count > 0 AND ("
+                 + " OR ".join(["contains(raw_json, ?)"] * len(needles)) + ")", [origin, *needles])
     awards, buyers, dates, totals = [], {}, [], {}
     for other_ocid, other_buyer, raw in rows:
         for award in json.loads(raw).get("awards") or []:
