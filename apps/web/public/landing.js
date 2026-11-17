@@ -78,9 +78,9 @@ function type(i) {
   if(typed[i]||RM){p.textContent=TX[i];typed[i]=1;return}
   let n=0;tm=setInterval(()=>{p.textContent=TX[i].slice(0,++n);if(n>=TX[i].length){clearInterval(tm);typed[i]=1}},18);
 }
-tabs($('#tt'),['manifest','test'],$('#tp'),i=>{cur=i;type(i)});
+if($('.term')){tabs($('#tt'),['manifest','test'],$('#tp'),i=>{cur=i;type(i)});
 new IntersectionObserver((e,o)=>{if(e[0].isIntersecting){type(cur);o.disconnect()}},{threshold:.4}).observe($('.term'));
-$('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(TX[cur]);$('#cp').textContent='Copied'}catch(e){$('#cp').textContent='Copy failed'}setTimeout(()=>$('#cp').textContent='Copy',1500)};
+$('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(TX[cur]);$('#cp').textContent='Copied'}catch(e){$('#cp').textContent='Copy failed'}setTimeout(()=>$('#cp').textContent='Copy',1500)};}
 const FQ=[['What happens if a tool times out?','Each tool call waits 30 seconds and retries once. If it still fails, the review file notes the limitation and the run continues.'],['What needs approval?','Anything that leaves BidBox, such as filing or sending a report. A named person must approve it first.'],['Where do credentials live?','In the host secret store. Config files only hold the secret name.'],['Where does the data come from?','Public procurement data, plus any connector you add. Each result is labelled live or sandbox.'],['Can I use a local model?','Yes. BidBox can run against a model on your own hardware.'],['Does it replace reviewers?','No. It prepares the file; a person decides.']];
 $('#fq').innerHTML=FQ.map((q,i)=>`<div class="q"><button aria-expanded="false" aria-controls="a${i}" id="b${i}">${q[0]}<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><div class="a" id="a${i}" role="region" aria-labelledby="b${i}"><div><p>${q[1]}</p></div></div></div>`).join('');
 document.querySelectorAll('.q button').forEach(b=>b.onclick=()=>{const q=b.parentElement,o=q.classList.toggle('open');b.setAttribute('aria-expanded',o)});

@@ -4,27 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#03195b">
-  <title>BidBox · Committee review</title>
+  <title>Review awards · BidBox</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/strings.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
-<body>
+<body data-space="app">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="#ask" aria-label="BidBox home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>bidbox<span class="brand-caption">Committee review</span></span></a>
-      <nav id="main-nav" aria-label="Main navigation">
-        <a href="#ask" data-nav="ask">Review</a>
-        <a href="#economics" data-nav="economics">Economics</a>
-        <a href="#integrations" data-nav="integrations">Integrations</a>
-        <a href="/connectors">Connectors</a>
-        <a href="#architecture" data-nav="architecture">Architecture</a>
-        <a href="#history" data-nav="history">Replay archive</a>
+      <a class="brand" href="/" aria-label="BidBox home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>bidbox<span class="brand-caption">Committee review</span></span></a>
+      <nav id="main-nav" aria-label="Auditor navigation">
+        <a href="/app" data-nav="ask">Review</a>
+        <a href="/app/approvals" data-nav="approvals">Approvals</a>
+        <a href="/app/reports" data-nav="reports">Reports</a>
+        <a href="/app/data" data-nav="data">Data</a>
       </nav>
+      <a class="space-switch" href="/connect">Connect a system</a>
       <span id="approval-header" class="header-note" hidden>Independent review</span>
     </div>
   </header>
+  <p class="crumbs" aria-label="Where am I"><a href="/">Home</a> / <a href="/app">Review</a> / <span id="crumb-page">Find a process</span></p>
   <div class="workspace-banner" aria-hidden="true"><canvas id="dither-canvas" data-seed="7" data-h="180"></canvas></div>
   <main id="main" class="page" tabindex="-1">
     <div id="data-status" class="data-status" role="status" aria-live="polite">Loading publisher data status…</div>
@@ -65,16 +65,28 @@
       <div class="principle-note"><span data-icon="shield" aria-hidden="true"></span><p>Observations for human review. Not allegations, and never an award decision.</p></div>
     </section>
 
-    <section id="history-screen" data-screen="history" hidden aria-labelledby="recent-title">
-      <p class="eyebrow">Separate replay archive</p><h1 id="recent-title">Recorded reviews</h1>
-      <p class="intro-copy">REPLAY — not live. Archived investigations never start from live intake.</p>
+    <section id="reports-screen" data-screen="reports" hidden aria-labelledby="recent-title">
+      <p class="eyebrow">Reports</p><h1 id="recent-title">Review files</h1>
+      <p class="intro-copy">Every review started here on downloaded live records, with its status and evidence file.</p>
       <div id="ask-badges" class="badge-row" hidden></div>
       <div id="runs" class="review-list" aria-live="polite"></div>
       <button id="show-more" class="text-button" type="button" hidden>Show more reviews</button>
     </section>
 
+    <section id="approvals-screen" data-screen="approvals" hidden aria-labelledby="approvals-title">
+      <p class="eyebrow">Approvals</p><h1 id="approvals-title">Waiting for sign-off</h1>
+      <p class="intro-copy">Reviews that need a named approver before any file is created.</p>
+      <div id="approvals-list" class="review-list" aria-live="polite"></div>
+    </section>
+
+    <section id="data-screen" data-screen="data" hidden aria-labelledby="data-title">
+      <p class="eyebrow">Data</p><h1 id="data-title">Where the records come from</h1>
+      <p class="intro-copy">Sources, how many records each holds, and when they were last downloaded.</p>
+      <div id="data-sources" class="card table-card"></div>
+    </section>
+
     <section id="process-screen" data-screen="process" hidden aria-labelledby="process-title">
-      <a class="back-link" href="#ask"><span data-icon="arrow-left" aria-hidden="true"></span> Published processes</a>
+      <a class="back-link" href="/app"><span data-icon="arrow-left" aria-hidden="true"></span> Published processes</a>
       <div id="process-badges" class="badge-row"></div>
       <p class="eyebrow">Contract process · publisher evidence</p>
       <h1 id="process-title">Opening source record…</h1>
@@ -85,8 +97,13 @@
       <p class="helper">This is source data, not an automated finding or approval. Observations need human review; no award decision is made.</p>
     </section>
 
+    <section id="record-screen" data-screen="record" hidden aria-labelledby="record-title">
+      <div class="page-heading"><div id="record-badges" class="badges"></div><h1 id="record-title">Contract record</h1><p id="record-reference" class="subtitle"></p></div>
+      <div id="record-fields" class="card table-card"></div>
+      <details class="card raw-ocds"><summary>Raw OCDS</summary><pre id="record-raw"></pre></details>
+    </section>
     <section id="review-screen" data-screen="review" hidden aria-labelledby="review-title">
-      <a class="back-link" href="#ask"><span data-icon="arrow-left" aria-hidden="true"></span> All reviews</a>
+      <a class="back-link" href="/app"><span data-icon="arrow-left" aria-hidden="true"></span> All reviews</a>
       <div id="review-badges" class="badge-row"></div>
       <p class="eyebrow">Review progress</p>
       <h1 id="review-title">Loading review…</h1>
@@ -101,10 +118,15 @@
       <div id="run-next" class="next-action"></div>
       <div id="run-downloads" class="download-actions"></div>
       <p id="run-context" class="helper"></p>
+      <details id="how-made" class="card usage-details"><summary>How this review was made</summary>
+        <section class="table-card"><h2>Configured list prices</h2><div id="pricing-table"></div></section>
+        <section class="table-card"><h2>This recorded review</h2><div id="cost-table"></div></section>
+        <h2>Usage for each model attempt</h2><div id="usage-table"></div><div id="how-notes" class="helper"></div>
+      </details>
     </section>
 
     <section id="approval-screen" data-screen="approval" hidden aria-labelledby="approval-title">
-      <a id="approval-back" class="back-link" href="#ask"><span data-icon="arrow-left" aria-hidden="true"></span> Review details</a>
+      <a id="approval-back" class="back-link" href="/app"><span data-icon="arrow-left" aria-hidden="true"></span> Review details</a>
       <div id="approval-badges" class="badge-row"></div>
       <p class="eyebrow">Independent committee review</p>
       <h1 id="approval-title">Your decision.<br>The evidence in front of you.</h1>
@@ -138,7 +160,7 @@
     </section>
 
     <section id="report-screen" data-screen="report" hidden aria-labelledby="report-title">
-      <a id="report-back" class="back-link" href="#ask"><span data-icon="arrow-left" aria-hidden="true"></span> Review progress</a>
+      <a id="report-back" class="back-link" href="/app"><span data-icon="arrow-left" aria-hidden="true"></span> Review progress</a>
       <div id="report-badges" class="badge-row"></div>
       <p id="report-eyebrow" class="eyebrow">Evidence for committee review</p>
       <h1 id="report-title">Loading evidence…</h1>
@@ -152,24 +174,8 @@
       <div class="principle-note"><span data-icon="shield" aria-hidden="true"></span><p>Prepared for committee decision. No award decision is made or implied.</p></div>
     </section>
 
-    <section id="economics-screen" data-screen="economics" hidden aria-labelledby="economics-title">
-      <p class="eyebrow">Cost transparency</p><h1 id="economics-title">Know what the review costs.</h1><p class="intro-copy">Provider-reported usage. Clearly entered list prices.<br>No estimates dressed up as facts.</p>
-      <div id="economics-select"></div>
-      <div id="economics-content" hidden><div id="economics-badges" class="badge-row"></div><p id="economics-run" class="helper"></p><section class="card table-card"><h2>Configured list prices</h2><div id="pricing-table"></div></section><section class="card table-card"><h2>This recorded review</h2><div id="cost-table"></div></section><details class="card usage-details"><summary>Usage for each model attempt</summary><div id="usage-table"></div></details><div id="economics-notes" class="helper"></div></div>
-    </section>
-
-    <section id="integrations-screen" data-screen="integrations" hidden aria-labelledby="integrations-title">
-      <p class="eyebrow">Connections & capabilities</p><h1 id="integrations-title">What’s connected.<br>What’s still planned.</h1><p class="intro-copy">A clear boundary between working local tools and features that are not available yet.</p><div id="integrations" class="card integration-card"><span class="spinner" aria-hidden="true"></span> Loading configuration</div>
-    </section>
-    <section id="architecture-screen" data-screen="architecture" hidden aria-labelledby="architecture-title">
-      <p class="eyebrow">Registry and audit evidence</p><h1 id="architecture-title">How the system works.</h1>
-      <p class="intro-copy">Architecture is generated from installed connectors. Sequences show recorded events, not a suggested workflow.</p>
-      <h2>Current architecture</h2><div id="architecture-diagram" class="diagram" tabindex="0" aria-label="Architecture diagram, scroll to explore"></div>
-      <label for="sequence-run">Recorded run</label><select id="sequence-run"><option value="">Choose a run</option></select>
-      <div id="sequence-diagram" class="diagram" tabindex="0" aria-label="Run sequence diagram, scroll to explore"></div>
-    </section>
     <footer class="page-footer"><span>bidbox</span><span>Calm, clear, defensible.</span></footer>
   </main>
-  <aside id="run-counter" class="run-counter" aria-label="Recorded tokens and list-price cost" hidden><span class="counter-label">Recorded usage</span><div><span id="counter-tokens">Not reported</span><span class="counter-divider" aria-hidden="true"></span><span id="counter-cost">Not configured</span></div><a id="counter-link" href="#economics">Cost details <span data-icon="arrow-up-right" aria-hidden="true"></span></a></aside>
+  <aside id="run-counter" class="run-counter" aria-label="Recorded tokens and list-price cost" hidden><span class="counter-label">Recorded usage</span><div><span id="counter-tokens">Not reported</span><span class="counter-divider" aria-hidden="true"></span><span id="counter-cost">Not configured</span></div><a id="counter-link" href="#how-made">How this review was made <span data-icon="arrow-up-right" aria-hidden="true"></span></a></aside>
 </body>
 </html>

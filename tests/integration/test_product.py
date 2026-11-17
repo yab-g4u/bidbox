@@ -64,12 +64,12 @@ def test_landing_and_application_routes_preserve_separate_assets():
     assert landing.status_code == 200
     assert "Give every contract award a first look." in landing.text
     assert 'href="/app"' in landing.text
-    assert 'href="/app#history"' in landing.text
+    assert 'href="/connect"' in landing.text and 'href="/developers"' in landing.text
     assert 'src="/landing.js"' in landing.text
     assert 'src="/app.js"' not in landing.text
     assert '<style>' not in landing.text and '<script>' not in landing.text and ' style=' not in landing.text
     assert "'unsafe-inline'" not in landing.headers["content-security-policy"]
-    for route in ("/app", "/app/", "/architecture"):
+    for route in ("/app", "/app/"):
         response = client.get(route)
         assert response.status_code == 200
         assert 'id="ask-screen"' in response.text

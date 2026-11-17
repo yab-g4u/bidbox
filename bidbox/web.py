@@ -24,7 +24,7 @@ from bidbox.connectors.redaction import redact
 
 
 from bidbox.data import data_status, get_process, search_processes
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,6 +59,8 @@ async def validation_error(request, exc):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request, exc):
+    if exc.status_code == 404 and not request.url.path.startswith("/api/") and "text/html" in request.headers.get("accept", "text/html"):
+        return FileResponse(PUBLIC_DIR / "404.html", status_code=404)
     return PublicJSON({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
 
 
@@ -125,6 +127,8 @@ def run_status(report: dict, events: list[dict]) -> str:
 @lru_cache(maxsize=1)
 def fixture_records() -> dict[str, dict]:
     path = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "releases.json"
+    if not path.exists():
+        return {}
     return {record["ocid"]: record for record in json.loads(path.read_text(encoding="utf-8")) if record.get("sandbox", record.get("synthetic"))}
 
 
@@ -220,10 +224,50 @@ def landing_page() -> FileResponse:
     return FileResponse(PUBLIC_DIR / "landing.html")
 
 
-@app.get("/app")
-@app.get("/app/")
-def index() -> FileResponse:
-    return FileResponse(PUBLIC_DIR / "index.html")
+SPACES = {
+    "app": ("index.html", r"|review/[^/]+|records/.+|process/.+|approvals|approvals/[^/]+(/[^/]+)?|reports|reports/[^/]+|data"),
+    "connect": ("connect.html", r"|new|status|architecture|[a-z0-9][a-z0-9_-]{0,63}"),
+    "developers": ("developers.html", r"|manifest|cli|api|samples"),
+}
+OLD_PATHS = {
+    "/connectors": "/connect", "/connectors/": "/connect", "/connectors/new": "/connect/new",
+    "/architecture": "/connect/architecture", "/app/admin/connectors": "/connect", "/app/admin/connectors/new": "/connect/new",
+    "/app/admin/integrations": "/connect/status", "/app/admin/economics": "/connect/status",
+    "/app/admin/architecture": "/connect/architecture", "/app/admin/replays": "/app/reports",
+}
+
+
+def space_shell(space: str, path: str = "") -> FileResponse:
+    shell, routes = SPACES[space]
+    if not re.fullmatch(routes, path.strip("/")):
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(PUBLIC_DIR / shell)
+
+
+def old_path_redirect(request: Request) -> RedirectResponse:
+    return RedirectResponse(OLD_PATHS[request.url.path], status_code=301)
+
+
+for _old in OLD_PATHS:
+    app.add_api_route(_old, old_path_redirect, methods=["GET"], include_in_schema=False)
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/{path:path}", include_in_schema=False)
+def index(path: str = "") -> FileResponse:
+    return space_shell("app", path)
+
+
+@app.get("/connect", include_in_schema=False)
+@app.get("/connect/{path:path}", include_in_schema=False)
+def connect_space(path: str = "") -> FileResponse:
+    return space_shell("connect", path)
+
+
+@app.get("/developers", include_in_schema=False)
+@app.get("/developers/{path:path}", include_in_schema=False)
+def developers_space(path: str = "") -> FileResponse:
+    return space_shell("developers", path)
 
 
 @app.get("/api/capabilities")
@@ -540,8 +584,12 @@ def approve(run_id: str, request: ApprovalRequest) -> dict:
 
 class CaseRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    question: str = Field(min_length=1, max_length=2000)
-    ocid: str | None = Field(default=None, max_length=300)
+    question: str | None = Field(default=None, min_length=1, max_length=2000)
+    ocid: str | None = Field(default=None, min_length=1, max_length=300)
+    mode: Literal["price", "supplier", "both"] | None = None
+
+
+MODE_LABELS = {"price": "price", "supplier": "supplier history", "both": "price and supplier history"}
 
 
 @app.get("/health")
@@ -556,6 +604,10 @@ def recent_cases():
 
 @app.post("/api/cases")
 def start_case(body: CaseRequest):
+    if body.ocid and body.mode:
+        return start_mode_review(body.ocid, body.mode)
+    if not body.question:
+        raise HTTPException(status_code=422, detail="Send an exact ocid with a review mode, or a question.")
     matches = cases.candidates(body.question)
     if body.ocid:
         matches = [hit for hit in matches if hit["ocid"] == body.ocid]
@@ -571,6 +623,21 @@ def start_case(body: CaseRequest):
         if sum(run["phase"] in ("queued", "running", "filing") for run in recent_cases()) >= 10:
             raise HTTPException(status_code=429, detail="Review queue is full. Try again after current reviews finish.")
         return PublicJSON({"run_id": cases.create_case(body.question, matches[0])}, status_code=202)
+
+
+def start_mode_review(ocid: str, mode: str):
+    """Button path: exact reference, no free-text search; deterministic tools run even without a model."""
+    process = get_process(ocid)
+    if not process:
+        raise HTTPException(status_code=404, detail="This contract process is not in the downloaded records. No reference guessed.")
+    if not process["award_count"]:
+        return PublicJSON({"status": "tender_stage", "candidates": [{"ocid": ocid}], "detail": "Tender-stage record with no published awards; award review is unavailable."}, status_code=409)
+    with _INTAKE_LOCK:
+        if sum(run["phase"] in ("queued", "running", "filing") for run in recent_cases()) >= 10:
+            raise HTTPException(status_code=429, detail="Review queue is full. Try again after current reviews finish.")
+        selected = {"ocid": ocid, "origin": process["origin"], "title": process.get("title"), "award_count": process["award_count"]}
+        run_id = cases.create_case(f"Review {MODE_LABELS[mode]} for {ocid}", selected, mode)
+    return PublicJSON({"run_id": run_id, "mode": mode}, status_code=202)
 
 
 @app.get("/api/runs/{run_id}/metrics")
@@ -620,20 +687,6 @@ def economics():
     return aggregate_economics([run["run_id"] for run in recent_cases()])
 
 
-@app.get("/connectors")
-@app.get("/connectors/")
-def connectors_page() -> FileResponse:
-    target = REPO_ROOT / "app.html"
-    if not target.exists():
-        target = PUBLIC_DIR / "app.html"
-    return FileResponse(target)
-
-
-@app.get("/architecture")
-def architecture_page():
-    return index()
-
-
 @app.get("/api/architecture")
 def architecture():
     from scripts.export_architecture import architecture_svg
@@ -680,6 +733,21 @@ async def security_boundary(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.get("/api/connectors/{name}/manifest")
+def connector_manifest(name: str) -> dict:
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", name):
+        raise HTTPException(status_code=404, detail="Connector not found")
+    path = REPO_ROOT / "bidbox" / "connectors" / name / "connector.yaml"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Connector not found")
+    return {"name": name, "yaml": path.read_text(encoding="utf-8")}
+
+
+@app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+def unknown_api(path: str):
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="public")

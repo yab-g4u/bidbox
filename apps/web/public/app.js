@@ -128,7 +128,7 @@ function eligibleRuns() {
 }
 function renderRuns() {
   const seen = new Set();
-  const latest = eligibleRuns().filter(run => run.replay).filter(run => {
+  const latest = eligibleRuns().filter(run => !run.replay).filter(run => {
     const key = run.ocid || run.run_id;
     if (seen.has(key)) return false;
     seen.add(key); return true;
@@ -139,7 +139,7 @@ function renderRuns() {
   if (available.length) {
     const origins = new Set(available.map(run => run.origin));
     const origin = origins.size === 1 ? available[0].origin : origins.has('sandbox') || origins.has('mixed') ? 'mixed' : 'not recorded';
-    badges('ask-badges', { origin, replay: true }, false);
+    badges('ask-badges', { origin, replay: false }, false);
   }
   if (!available.length) {
     const empty = node('div', 'empty-state');
@@ -152,7 +152,7 @@ function renderRuns() {
     list.append(empty);
   }
   available.slice(0, shownRuns).forEach(run => {
-    const link = node('a', 'review-row'); link.href = `#review/${encodeURIComponent(run.run_id)}`;
+    const link = node('a', 'review-row'); link.href = `/app/review/${encodeURIComponent(run.run_id)}`;
     const copy = node('span'); copy.append(node('span', 'review-row-title', shortTitle(run)), node('span', 'review-row-meta', `${run.buyer_name || 'Buyer not recorded'} · ${stamp(run.started_at)}`));
     const end = node('span', 'review-row-end'); end.append(chip(...status(run)), icon('chevron-right'));
     link.append(copy, end); list.append(link);
@@ -163,7 +163,7 @@ function renderExamples() {
   const examples = $('examples'); examples.replaceChildren();
   published.slice(0, 3).forEach(process => {
     const button = node('button', 'example-chip', shortTitle(process)); button.type = 'button'; button.title = shortTitle(process);
-    button.onclick = () => { location.hash = `process/${encodeURIComponent(process.ocid)}`; };
+    button.onclick = () => { go(`/app/process/${encodeURIComponent(process.ocid)}`); };
     examples.append(button);
   });
   if (!published.length) examples.append(node('span', 'helper', 'No matching live process. No sandbox example has been substituted.'));
@@ -171,7 +171,7 @@ function renderExamples() {
 function renderPublished() {
   const list = $('live-results'); list.replaceChildren();
   published.forEach(process => {
-    const link = node('a', 'review-row'); link.href = `#process/${encodeURIComponent(process.ocid)}`;
+    const link = node('a', 'review-row'); link.href = `/app/process/${encodeURIComponent(process.ocid)}`;
     const copy = node('span');
     copy.append(node('span', 'review-row-title', shortTitle(process)), node('span', 'review-row-meta', `${process.buyer_name || 'Buyer not reported'} · FY ${process.fiscal_years.join(', ')}`));
     const end = node('span', 'review-row-end'); end.append(chip(process.award_count ? `${number(process.award_count)} published awards` : 'Tender stage', '', 'file'), icon('chevron-right'));
@@ -221,31 +221,62 @@ function renderProcess(process) {
   });
   if (!awards.length) wrap.append(node('p', 'card helper', 'No awards are published in this selected release. This remains a tender-stage contract process; no award has been assumed.'));
   const sourceCard = $('process-source'); sourceCard.replaceChildren(sourceLinks([{source_url: process.source_url, ocid: process.ocid, field_path: 'Selected downloaded release'}], {origin: process.origin}));
+  sourceCard.append(routeLink('Plain-language record view', `/app/records/${encodeURIComponent(process.ocid)}`, 'button secondary full-width', 'file'));
   const snapshot = routeLink('View downloaded OCDS record', `/api/data/process?ocid=${encodeURIComponent(process.ocid)}`, 'button secondary full-width', 'code'); snapshot.target = '_blank'; snapshot.rel = 'noopener noreferrer'; sourceCard.append(snapshot);
   sourceCard.append(node('p', 'helper', `Source publication: ${stamp(process.source_publication_date)} · Ingested: ${stamp(process.ingested_at)}. This is an archived download, not a fresh portal check.`));
   if (awards.length && !awards.some(award => award.items?.length)) sourceCard.append(node('p', 'helper', 'Award item classifications are not reported. No price comparables or benchmark has been invented.'));
   sourceCard.append(node('p', 'helper', 'Full fiscal-year coverage is not independently established. Differing releases with the same date have no established chronological ordering.'));
   if (awards.length) {
     const choices = node('div', 'download-actions');
-    ['price', 'supplier history', 'price and supplier history'].forEach(check => {
-      const button = node('button', 'button secondary', `Review ${check}`); button.type = 'button';
-      button.onclick = () => startCase(`Review ${check} for ${process.ocid}`, process.ocid, button);
+    [['price', 'price'], ['supplier', 'supplier history'], ['both', 'price and supplier history']].forEach(([mode, check]) => {
+      const button = node('button', 'button secondary', `Review ${check}`); button.type = 'button'; button.dataset.mode = mode;
+      button.onclick = () => startReview(process.ocid, mode, button);
       choices.append(button);
     });
     sourceCard.append(choices);
   }
 }
+let glossary = null;
+function ocdsValue(record, path) {
+  return path.split(/\.|\[(\d+)\]/).filter(Boolean).reduce((value, key) => value == null ? undefined : value[/^\d+$/.test(key) ? Number(key) : key], record);
+}
+async function renderRecord(process) {
+  glossary = glossary || await api('/glossary.json');
+  const record = process.record, award = (record.awards || [])[0] || {};
+  $('record-badges').replaceChildren(chip(process.origin === 'sandbox' ? 'SANDBOX' : 'LIVE DATA · downloaded PPIP', '', 'link'));
+  $('record-title').textContent = process.title || 'Title not published';
+  $('record-reference').textContent = process.ocid;
+  const period = record.tender?.tenderPeriod;
+  const values = {
+    'buyer.name': record.buyer?.name, 'tender.title': record.tender?.title || award.title,
+    'awards[0].value.amount': award.value?.amount == null ? null : amount(award.value.amount, award.value.currency),
+    'tender.procurementMethod': record.tender?.procurementMethod, 'date': record.date || process.release_date,
+    'tender.tenderPeriod': period?.startDate || period?.endDate ? `${period.startDate || 'Not published'} → ${period.endDate || 'Not published'}` : null,
+    'awards[0].date': award.date, 'awards[0].suppliers': (award.suppliers || []).map(s => s.name || s.id).filter(Boolean).join(', ') || null,
+    'tender.status': record.tender?.status || award.status,
+  };
+  const table = node('table', 'data-table'), body = node('tbody');
+  Object.entries(values).forEach(([path, value]) => {
+    const entry = glossary[path] || { label: path, meaning: '' }, row = node('tr'), heading = node('th'); heading.scope = 'row';
+    const help = node('button', 'what-is', 'What is this?'); help.type = 'button'; help.title = `${entry.meaning} OCDS field: ${path}`; help.setAttribute('aria-label', `What is ${entry.label}? ${entry.meaning}`);
+    heading.append(node('span', '', entry.label), help, node('span', 'plain-meaning', entry.meaning));
+    const cell = value == null || value === '' ? node('td', 'not-published', 'Not published') : node('td', '', String(value));
+    row.append(heading, cell); body.append(row);
+  });
+  table.append(body); $('record-fields').replaceChildren(table);
+  $('record-raw').textContent = JSON.stringify(record, null, 2);
+}
 function renderCases() {
   const list = $('cases'); list.replaceChildren();
   runs.filter(run => !run.replay).slice(0, 12).forEach(run => {
-    const link = node('a', 'review-row'); link.href = `#review/${encodeURIComponent(run.run_id)}`;
+    const link = node('a', 'review-row'); link.href = `/app/review/${encodeURIComponent(run.run_id)}`;
     const copy = node('span'); copy.append(node('span', 'review-row-title', shortTitle(run)), node('span', 'review-row-meta', `${run.run_id} · ${stamp(run.started_at)}`));
     link.append(copy, chip(...status(run))); list.append(link);
   });
   if (!list.childNodes.length) list.append(node('p', 'helper', S.noCases));
 }
 async function loadRuns() {
-  try { runs = await api('/api/runs'); renderRuns(); renderCases(); renderExamples(); if (screen === 'economics' && !current) renderEconomicsPicker(); }
+  try { runs = await api('/api/runs'); renderRuns(); renderCases(); renderExamples(); renderApprovals(); }
   catch (error) {
     $('runs').replaceChildren(node('div', 'empty-state', error.message));
     const retry = node('button', 'text-button', 'Try loading reviews again'); retry.type = 'button'; retry.onclick = loadRuns; $('runs').append(retry);
@@ -286,7 +317,7 @@ function setView(nextScreen) {
   screen = nextScreen;
   document.querySelectorAll('[data-screen]').forEach(section => section.hidden = section.dataset.screen !== screen);
   document.querySelectorAll('[data-nav]').forEach(link => {
-    if (link.dataset.nav === (['review', 'report', 'approval', 'process'].includes(screen) ? 'ask' : screen)) link.setAttribute('aria-current', 'page');
+    if (link.dataset.nav === (NAV_FOR[screen] || screen)) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   $('main-nav').hidden = screen === 'approval'; $('approval-header').hidden = screen !== 'approval';
@@ -351,7 +382,16 @@ function buildTimeline(detail) {
     { title: filed ? 'File created' : 'File creation', done: filed, copy: filed ? 'The recorded review file is available below.' : detail.status === 'rejected' ? 'This decision does not authorize a new file.' : decision ? 'Decision saved. File creation has not been confirmed; the requester’s runner must continue.' : 'No file is created before a named committee decision.' },
   ];
   const plan = events.find(event => event.tool === 'plan');
-  if (plan) steps.unshift({ title: S.plan, done: true, copy: JSON.stringify(plan.outputs) });
+  if (plan?.outputs?.mode) {
+    const toolSteps = [...(plan.outputs.tools || []).map(item => {
+      const ran = events.find(event => event.tool === item.tool && event.outputs?.status);
+      const ok = ran?.outputs?.status === 'ok';
+      return { title: item.tool.replaceAll('_', ' '), done: ok, review: !!ran && !ok, copy: ran ? (ran.outputs.summary || ran.outputs.reason || 'Recorded.') + (ran.outputs.next_check && !ok ? ` Next available check: ${ran.outputs.next_check.replaceAll('_', ' ')}.` : '') : 'Not run yet.' };
+    }), ...(plan.outputs.skipped || []).map(item => ({ title: `${item.tool.replaceAll('_', ' ')} (skipped)`, review: true, copy: item.reason }))];
+    steps.splice(1, 1, ...toolSteps);
+    steps.unshift({ title: `Plan · ${plan.outputs.mode} review`, done: true, copy: plan.outputs.summary });
+    if (detail.review.brief) steps.splice(steps.length - 2, 0, { title: 'Review brief', done: true, copy: detail.review.brief });
+  } else if (plan) steps.unshift({ title: S.plan, done: true, copy: JSON.stringify(plan.outputs) });
   const list = $('timeline'); list.replaceChildren();
   steps.forEach(step => {
     const item = node('li', `timeline-step ${step.done ? 'complete' : step.review ? 'review' : ''}`);
@@ -387,13 +427,14 @@ function renderReview(detail) {
   buildTimeline(detail); renderLogs(detail);
   const action = $('run-next'); action.replaceChildren();
   if (detail.status === 'awaiting_approval') {
-    action.append(routeLink('Open independent approval screen', `#approval/${encodeURIComponent(detail.run_id)}`), node('p', '', detail.signed_approval_required ? S.signedRequired : 'Review the full evidence and limitations before recording a decision.'));
-  } else if (detail.report_available && detail.status !== 'rejected') action.append(routeLink('Read the review file', `#report/${encodeURIComponent(detail.run_id)}`));
-  else if (detail.approval) action.append(routeLink('See the recorded decision', `#approval/${encodeURIComponent(detail.run_id)}`));
-  else action.append(routeLink('View the recorded evidence', `#report/${encodeURIComponent(detail.run_id)}`, 'button secondary'));
+    action.append(routeLink('Open independent approval screen', `/app/approvals/${encodeURIComponent(detail.run_id)}`), node('p', '', detail.signed_approval_required ? S.signedRequired : 'Review the full evidence and limitations before recording a decision.'));
+  } else if (detail.report_available && detail.status !== 'rejected') action.append(routeLink('Read the review file', `/app/reports/${encodeURIComponent(detail.run_id)}`));
+  else if (detail.approval) action.append(routeLink('See the recorded decision', `/app/approvals/${encodeURIComponent(detail.run_id)}`));
+  else action.append(routeLink('View the recorded evidence', `/app/reports/${encodeURIComponent(detail.run_id)}`, 'button secondary'));
   $('counter-tokens').textContent = detail.tokens == null ? 'Tokens not reported' : `${number(detail.tokens)} tokens`;
   $('counter-cost').textContent = detail.cost_per_run == null ? 'List price not configured' : `${cost(detail.cost_per_run)} list price`;
-  $('counter-link').href = `#economics/${encodeURIComponent(detail.run_id)}`;
+  $('counter-link').onclick = event => { event.preventDefault(); $('how-made').open = true; $('how-made').scrollIntoView({ behavior: 'smooth' }); };
+  if (!$('how-made').dataset.run || $('how-made').dataset.run !== detail.run_id) { $('how-made').dataset.run = detail.run_id; loadHowMade(detail.run_id); }
   if (detail.error) action.append(node('p', 'form-error', detail.error));
   if (detail.notification) action.append(node('p', 'helper', `Approval notification: ${detail.notification.status}. ${detail.notification.detail || ''}`));
   $('run-context').textContent = detail.replay ? S.replay : S.liveRun;
@@ -453,7 +494,7 @@ function signoff(detail) {
 }
 function renderApproval(detail) {
   badges('approval-badges', detail, false);
-  $('approval-back').href = `#review/${encodeURIComponent(detail.run_id)}`;
+  $('approval-back').href = `/app/review/${encodeURIComponent(detail.run_id)}`;
   const context = $('approval-context'); context.replaceChildren(chip(...status(detail)), node('h2', 'approval-context-title', shortTitle(detail)), node('p', 'approval-context-meta', `${detail.buyer_name || 'Buyer not recorded'} · ${detail.ocid || 'Reference not recorded'}`));
   const contract = detail.contract || {};
   if (typeof contract.amount === 'number') context.append(node('div', 'award-number', amount(contract.amount, contract.currency)), node('p', 'helper', detail.context_source === 'current fixture' ? 'Value from the current synthetic fixture, not an archived review snapshot.' : 'Value recorded during the review.'));
@@ -474,8 +515,8 @@ function renderApproval(detail) {
   if (!pending) {
     $('decision-confirm').hidden = true; pendingDecision = null;
     $('approval-state').append(signoff(detail));
-    if (detail.file_created) $('approval-state').append(routeLink('File created · read the file', `#report/${encodeURIComponent(detail.run_id)}`, 'button primary full-width'));
-    else if (detail.status === 'approved') $('approval-state').append(node('p', 'helper', 'Decision recorded. File creation is not yet confirmed; the requester’s runner must continue.'), routeLink('View recorded progress', `#review/${encodeURIComponent(detail.run_id)}`, 'button secondary full-width'));
+    if (detail.file_created) $('approval-state').append(routeLink('File created · read the file', `/app/reports/${encodeURIComponent(detail.run_id)}`, 'button primary full-width'));
+    else if (detail.status === 'approved') $('approval-state').append(node('p', 'helper', 'Decision recorded. File creation is not yet confirmed; the requester’s runner must continue.'), routeLink('View recorded progress', `/app/review/${encodeURIComponent(detail.run_id)}`, 'button secondary full-width'));
     else if (detail.status === 'rejected') $('approval-state').append(node('p', 'helper', 'Decision recorded. This decision does not authorize a new file.'));
   } else {
     if (detail.review.status === 'failed') $('approval-state').append(node('p', 'form-error', 'The automated evidence review failed validation. Verify the underlying sources manually before signing.'));
@@ -492,7 +533,7 @@ function renderApproval(detail) {
 }
 function renderReport(detail) {
   badges('report-badges', detail);
-  $('report-back').href = `#review/${encodeURIComponent(detail.run_id)}`;
+  $('report-back').href = `/app/review/${encodeURIComponent(detail.run_id)}`;
   $('report-eyebrow').textContent = detail.file_created ? 'Filed evidence for committee review' : detail.report_available && detail.status !== 'awaiting_approval' ? 'Earlier recorded file · current filing not confirmed' : 'Recorded evidence · not a filed report';
   $('report-title').textContent = shortTitle(detail);
   $('report-subtitle').textContent = `${detail.buyer_name || 'Buyer not recorded'} · ${detail.ocid || 'Contract reference not recorded'}`;
@@ -518,7 +559,7 @@ function renderReport(detail) {
   });
   $('signoff').replaceChildren(signoff(detail));
   $('report-action').replaceChildren();
-  if (detail.status === 'awaiting_approval') $('report-action').append(routeLink('Continue to independent approval', `#approval/${encodeURIComponent(detail.run_id)}`));
+  if (detail.status === 'awaiting_approval') $('report-action').append(routeLink('Continue to independent approval', `/app/approvals/${encodeURIComponent(detail.run_id)}`));
   else if (detail.report_available) $('report-action').append(routeLink(detail.file_created ? 'Open the filed Markdown report' : 'Open the earlier Markdown report', `/api/runs/${encodeURIComponent(detail.run_id)}/report`, 'button secondary', 'arrow-up-right'));
 }
 function dataTable(rows) {
@@ -526,19 +567,7 @@ function dataTable(rows) {
   rows.forEach(([label, value]) => { const row = node('tr'), heading = node('th', '', label); heading.scope = 'row'; row.append(heading, node('td', '', value)); body.append(row); });
   table.append(body); return table;
 }
-function renderEconomicsPicker() {
-  $('economics-content').hidden = true;
-  const wrap = $('economics-select'); wrap.replaceChildren(node('p', 'helper', 'Choose a recorded review to inspect its usage and costs.'));
-  const list = node('div', 'review-list');
-  eligibleRuns().slice(0, 6).forEach(run => { const link = node('a', 'review-row', shortTitle(run)); link.href = `#economics/${encodeURIComponent(run.run_id)}`; link.append(icon('chevron-right')); list.append(link); });
-  if (!list.childNodes.length) list.append(node('p', 'helper', 'No recorded award review is available yet.'));
-  wrap.append(list);
-  renderAggregate();
-}
 function renderEconomics(detail) {
-  $('economics-select').replaceChildren(); $('economics-content').hidden = false;
-  badges('economics-badges', detail, false);
-  $('economics-run').textContent = `${shortTitle(detail)} · ${detail.run_id}`;
   const m = detail.metrics, p = m.prices;
   const price = field => field.configured ? `$${field.value} per 1M tokens` : 'Not configured';
   $('pricing-table').replaceChildren(dataTable([
@@ -555,103 +584,53 @@ function renderEconomics(detail) {
     const row = node('div', 'usage-row'); row.append(node('strong', '', call.model || 'Model not recorded'), node('p', '', `Input ${number(call.input_tokens)} · Output ${number(call.output_tokens)} · Reasoning ${number(call.reasoning_tokens)}`), node('p', '', `${call.status || 'Status not recorded'} · ${call.latency_ms == null ? 'Latency not recorded' : `${number(call.latency_ms)} ms`} · usage ${call.usage}`)); $('usage-table').append(row);
   });
   if (!m.llm_calls.length) $('usage-table').append(node('p', 'helper', 'No model attempts were recorded.'));
-  $('economics-notes').replaceChildren(...m.notes.map(note => node('p', '', note)));
+  $('how-notes').replaceChildren(...m.notes.map(note => node('p', '', note)));
 }
-async function renderIntegrations() {
-  const wrap = $('integrations'); wrap.replaceChildren(node('p', 'helper', 'Checking connector configuration…'));
+function renderApprovals() {
+  const list = $('approvals-list'); list.replaceChildren();
+  runs.filter(run => !run.replay && run.status === 'awaiting_approval').forEach(run => {
+    const link = node('a', 'review-row'); link.href = `/app/approvals/${encodeURIComponent(run.run_id)}`;
+    const copy = node('span'); copy.append(node('span', 'review-row-title', shortTitle(run)), node('span', 'review-row-meta', `${run.buyer_name || 'Buyer not recorded'} · ${stamp(run.started_at)}`));
+    link.append(copy, chip(...status(run))); list.append(link);
+  });
+  if (!list.childNodes.length) list.append(node('p', 'helper', 'Nothing is waiting for a decision.'));
+}
+async function renderData() {
+  const wrap = $('data-sources'); wrap.replaceChildren(node('p', 'helper', 'Loading data status…'));
   try {
-    const result = await api('/api/integrations'); wrap.replaceChildren(node('p', 'helper', S.noTestSend));
-    const groups = [...new Set(result.integrations.map(item => item.kind || 'invalid'))];
-    groups.forEach(kind => {
-      wrap.append(node('h2', 'integration-group', kind.replaceAll('_', ' ')));
-      result.integrations.filter(item => (item.kind || 'invalid') === kind).forEach(item => {
-        const row = node('article', 'integration-row'), heading = node('div', 'section-heading');
-        const tone = item.status === 'live' ? 'ok' : item.status === 'sandbox' ? 'sandbox' : ['error', 'not_configured'].includes(item.status) ? 'review' : '';
-        heading.append(node('h3', '', item.name), chip(item.status.replaceAll('_', ' '), tone, 'connection'));
-        row.append(heading, node('p', '', item.detail), node('p', 'helper', `Intended: ${item.target_mode || S.missing} · Data: ${item.data_class || S.missing} · Last checked: ${stamp(item.last_check)} · ${item.latency_ms == null ? 'Latency not reported' : `${number(item.latency_ms)} ms`}`));
-        (item.credentials || []).forEach(credential => row.append(node('p', 'helper', `${credential.name}: ${credential.present ? 'present' : 'missing'}`)));
-        const checklist = node('details'); checklist.append(node('summary', '', S.checklist));
-        (item.next_week_checklist || []).forEach(step => checklist.append(node('p', 'helper', typeof step === 'string' ? step : JSON.stringify(step))));
-        checklist.append(node('p', 'helper', `Outbound fields: ${(item.field_allowlist || []).join(', ') || 'none'}`));
-        if (item.data_class === 'personal') checklist.append(node('p', 'helper', `Disabled until BIDBOX_ENABLE_PERSONAL_${item.name.toUpperCase()}=1 on the host.`));
-        row.append(checklist);
-        const policy = node('details'); policy.append(node('summary', '', S.actions));
-        (item.actions || []).forEach(action => policy.append(node('p', 'helper', `${action.name} · ${action.mode} · approval ${action.approval_required ? 'required at Connector.perform' : 'not required'}`)));
-        row.append(policy);
-        if (item.status !== 'planned') {
-          const button = node('button', 'button secondary', S.testConnection), feedback = node('pre', 'helper');
-          button.type = 'button'; feedback.setAttribute('role', 'status');
-          button.onclick = async () => {
-            button.disabled = true; button.textContent = S.testing;
-            try { feedback.textContent = JSON.stringify(await api(`/api/integrations/${encodeURIComponent(item.name)}/test`, {method: 'POST'}), null, 2); }
-            catch (error) { feedback.textContent = error.message; }
-            finally { button.disabled = false; button.textContent = S.testConnection; }
-          };
-          row.append(button, feedback);
-        }
-        wrap.append(row);
-      });
+    const d = await api('/api/data/status');
+    const rows = [['Data label', d.label || S.missing], ['Live records', number(d.counts?.live ?? 0)], ['Sandbox records', number(d.counts?.sandbox ?? 0)],
+      ['Last downloaded', stamp(d.last_ingested_at)], ['Publisher data as of', stamp(d.data_as_of)], ['Processes with awards', number(d.latest_processes_with_awards ?? 0)]];
+    wrap.replaceChildren(node('h2', '', 'Summary'), dataTable(rows));
+    (d.ingest_states || []).forEach(state => {
+      wrap.append(node('h2', '', `Source · fiscal year ${state.fiscal_year}`), dataTable([['Address', state.source_url], ['Status', state.status], ['Pages downloaded', number(state.pages)], ['Updated', stamp(state.updated_at)], ['Coverage', state.coverage_note || S.missing]]));
+      if (state.error) wrap.append(node('p', 'form-error', state.error));
     });
-    const guide = node('details', 'integration-row'); guide.append(node('summary', '', S.addSystem));
-    result.add_a_system.steps.forEach(step => guide.append(node('p', 'helper', `${step.n}. ${step.text}`), node('pre', '', step.command)));
-    guide.append(node('p', 'helper', result.add_a_system.note)); wrap.append(guide);
-    wrap.append(node('h2', 'integration-group', 'Built-in approval boundary'), node('p', 'helper', 'create_investigation_file requires a named approval for this run and the current report hash. Enforcement: require_report_approval in the tool, not the UI. Rejection creates nothing.'));
+    if (!(d.counts?.live || d.counts?.sandbox)) wrap.append(node('p', 'helper', 'No records are downloaded yet. Ask your system administrator to run the PPIP download.'));
   } catch (error) { wrap.replaceChildren(node('p', 'helper', error.message)); }
 }
-async function renderAggregate() {
-  try {
-    const result = await api('/api/economics');
-    if (screen !== 'economics' || current) return;
-    const card = node('section', 'card table-card'); card.append(node('h2', '', S.working), node('p', 'helper', S.outcome), dataTable([
-      ['All cases', number(result.runs)], ['Approved files', number(result.outcomes)], ['Total cost', cost(result.total_cost_usd)], ['Cost per outcome', cost(result.cost_per_outcome_usd)],
-      ['Model calls / outcome (all cases)', number(result.calls_per_outcome)], ['Worst completed-run calls', number(result.worst_completed_run_calls)],
-      ['KES per outcome', result.cost_per_outcome_kes == null ? S.missing : number(result.cost_per_outcome_kes)], ['FX date', result.fx.date || S.missing],
-      ['Model comparison', S.notMeasured], ['Cache benefit', S.notMeasured]
-    ]), node('p', 'helper', result.working)); $('economics-select').prepend(card);
-  } catch (error) { if (screen === 'economics' && !current) $('economics-select').prepend(node('p', 'helper', error.message)); }
-}
-async function drawDiagram(path, id) {
-  const wrap = $(id); wrap.replaceChildren(node('p', 'helper', 'Generating from recorded metadata…'));
-  try {
-    const result = await api(path), parsed = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
-    if (parsed.querySelector('parsererror') || parsed.documentElement.localName !== 'svg') throw new Error('Invalid generated diagram');
-    const allowed = new Set(['svg', 'defs', 'marker', 'polygon', 'rect', 'text', 'line', 'path', 'g', 'title']);
-    for (const element of parsed.querySelectorAll('*')) {
-      if (!allowed.has(element.localName) || [...element.attributes].some(attribute => /^(on|href|style)/i.test(attribute.localName))) throw new Error('Unexpected content in generated diagram');
-    }
-    const svg = document.importNode(parsed.documentElement, true);
-    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', id === 'architecture-diagram' ? S.architecture : S.sequence);
-    wrap.replaceChildren(svg);
-  } catch (error) { wrap.replaceChildren(node('p', 'helper', error.message)); }
-}
-async function renderArchitecture() {
-  drawDiagram('/api/architecture', 'architecture-diagram');
-  const select = $('sequence-run'); select.replaceChildren(node('option', '', 'Choose a run')); select.firstChild.value = '';
-  try {
-    const available = await api('/api/runs');
-    available.forEach(run => { const option = node('option', '', `${run.replay ? S.replay + ' · ' : ''}${run.run_id}`); option.value = run.run_id; select.append(option); });
-  } catch (error) { $('sequence-diagram').replaceChildren(node('p', '', error.message)); }
-  select.onchange = () => {
-    if (select.value) drawDiagram(`/api/runs/${encodeURIComponent(select.value)}/sequence`, 'sequence-diagram');
-    else $('sequence-diagram').replaceChildren(node('p', '', S.noSequence));
-  }; select.onchange();
+async function loadHowMade(id) {
+  try { const m = await api(`/api/runs/${encodeURIComponent(id)}/metrics`); if (current === id) renderEconomics({ metrics: m }); }
+  catch (error) { $('cost-table').replaceChildren(node('p', 'helper', error.message)); }
 }
 function renderCurrent() {
   if (!data) return;
   if (screen === 'review') renderReview(data);
   else if (screen === 'approval') renderApproval(data);
   else if (screen === 'report') renderReport(data);
-  else if (screen === 'economics') renderEconomics(data);
   setView(screen);
   document.title = `${shortTitle(data)} · BidBox`;
 }
+const PAGE_LABELS = { ask: 'Find a process', process: 'Contract process', records: 'Contract record', record: 'Contract record', review: 'Review progress', approvals: 'Approvals', approval: 'Approval', reports: 'Reports', report: 'Review file', data: 'Data' };
+const NAV_FOR = { review: 'ask', process: 'ask', record: 'ask', records: 'ask', approval: 'approvals', report: 'reports' };
 async function navigate() {
   const version = ++routeVersion;
-  let parts; try { parts = (location.hash.slice(1) || 'ask').split('/').map(decodeURIComponent); } catch (_) { parts = ['ask']; }
-  if (!location.hash && location.pathname === '/architecture') parts = ['architecture'];
-  const view = ['ask', 'process', 'review', 'approval', 'report', 'economics', 'integrations', 'architecture', 'history'].includes(parts[0]) ? parts[0] : 'ask';
+  let parts; try { parts = location.pathname.replace(/^\/app\/?/, '').split('/').filter(Boolean).map(decodeURIComponent); } catch (_) { parts = []; }
+  const ROUTES = { review: 'review', process: 'process', records: 'records', approvals: parts[1] ? 'approval' : 'approvals', reports: parts[1] ? 'report' : 'reports', data: 'data' };
+  const view = ROUTES[parts[0]] || 'ask';
+  if (['process', 'records'].includes(view)) parts = [parts[0], parts.slice(1).join('/')];
   invitationToken = view === 'approval' ? parts[2] || null : null;
-  const id = ['process', 'review', 'approval', 'report', 'economics'].includes(view) ? parts[1] || null : null;
+  const id = ['process', 'records', 'review', 'approval', 'report'].includes(view) ? parts[1] || null : null;
   const changed = current !== id;
   if (changed) {
     stopStream(); current = id; data = null; pendingDecision = null;
@@ -659,11 +638,17 @@ async function navigate() {
   }
   setView(view); notice('');
   $('main').setAttribute('aria-busy', 'false');
-  document.title = 'BidBox · Committee review';
-  if (view === 'ask' || view === 'history') { loadRuns(); return; }
-  if (view === 'architecture') { await renderArchitecture(); return; }
-  if (view === 'integrations') { await renderIntegrations(); return; }
-  if (view === 'economics' && !id) { renderEconomicsPicker(); return; }
+  document.title = `${PAGE_LABELS[view] || 'Review'} · Review awards · BidBox`; $('crumb-page').textContent = PAGE_LABELS[view] || 'Find a process';
+  if (['ask', 'reports', 'approvals'].includes(view)) { loadRuns(); return; }
+  if (view === 'data') { await renderData(); return; }
+  if (view === 'records') {
+    try {
+      const process = await api(`/api/data/process?ocid=${encodeURIComponent(id || '')}`);
+      if (version !== routeVersion) return;
+      setView('record'); await renderRecord(process); document.title = `${process.title || process.ocid} · BidBox`;
+    } catch (error) { if (version === routeVersion) { $('record-screen').hidden = true; notice(error.message, 'review'); } }
+    return;
+  }
   if (view === 'process') {
     data = null; $('main').setAttribute('aria-busy', 'true'); notice('Opening downloaded publisher evidence…');
     try {
@@ -673,14 +658,14 @@ async function navigate() {
       renderProcess(process); notice(''); document.title = `${process.title || process.ocid} · BidBox`;
     } catch (error) {
       if (version !== routeVersion) return;
-      $('process-screen').hidden = true; notice(error.message, 'review'); $('page-notice').append(routeLink('Return to published processes', '#ask', 'text-button', 'arrow-left'));
+      $('process-screen').hidden = true; notice(error.message, 'review'); $('page-notice').append(routeLink('Return to published processes', '/app', 'text-button', 'arrow-left'));
     } finally { if (version === routeVersion) $('main').setAttribute('aria-busy', 'false'); }
     return;
   }
   if (!id || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(id)) {
     $(`${view}-screen`).hidden = true;
     notice('This review link is incomplete. Return to all reviews and choose a recorded award.', 'review');
-    $('page-notice').append(routeLink('Return to recorded reviews', '#ask', 'text-button', 'arrow-left')); return;
+    $('page-notice').append(routeLink('Return to recorded reviews', '/app', 'text-button', 'arrow-left')); return;
   }
   if (data) { renderCurrent(); refresh(id); return; }
   $('approval-form').hidden = true;
@@ -694,7 +679,7 @@ async function navigate() {
     if (version !== routeVersion) return;
     $(`${view}-screen`).hidden = true;
     notice(error.message, 'review');
-    const back = routeLink('Return to recorded reviews', '#ask', 'text-button', 'arrow-left'); $('page-notice').append(back);
+    const back = routeLink('Return to recorded reviews', '/app', 'text-button', 'arrow-left'); $('page-notice').append(back);
   } finally { if (version === routeVersion) $('main').setAttribute('aria-busy', 'false'); }
 }
 function fillConfirm(snapshot) {
@@ -739,20 +724,30 @@ async function submitDecision() {
       pendingDecision = { ...snapshot, uncertain: true };
       $('decision-error').textContent = recorded ? 'Your decision was recorded, but file status could not be loaded. Check recorded progress; do not submit the decision again.' : 'The outcome could not be confirmed. Check recorded progress before submitting again.';
       $('decision-error').hidden = false;
-      $('approval-state').replaceChildren(routeLink('Check recorded progress', `#review/${encodeURIComponent(id)}`, 'button secondary full-width'));
+      $('approval-state').replaceChildren(routeLink('Check recorded progress', `/app/review/${encodeURIComponent(id)}`, 'button secondary full-width'));
     }
   }
 }
 let intakeBusy = false;
+async function startReview(ocid, mode, button) {
+  if (intakeBusy) return;
+  intakeBusy = true; const label = button.textContent; button.disabled = true; button.textContent = S.starting;
+  try {
+    const result = await api('/api/cases', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ocid, mode})});
+    if (!result.run_id) throw new Error(result.detail || 'The review did not start.');
+    await loadRuns(); go(`/app/review/${encodeURIComponent(result.run_id)}`); return;
+  } catch (error) { notice(`${error.message} ${S.unknownOutcome}`, 'review'); }
+  finally { intakeBusy = false; button.disabled = false; button.textContent = label; }
+}
 async function startCase(question, ocid, button) {
   if (intakeBusy) return;
   intakeBusy = true; const label = button.textContent; button.disabled = true; button.textContent = S.starting;
   $('search-feedback').textContent = S.starting;
   try {
     const result = await api('/api/cases', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question, ...(ocid ? {ocid} : {})})});
-    if (result.run_id) { await loadRuns(); location.hash = `review/${encodeURIComponent(result.run_id)}`; return; }
+    if (result.run_id) { await loadRuns(); go(`/app/review/${encodeURIComponent(result.run_id)}`); return; }
     if (result.status === 'tender_stage') {
-      $('search-feedback').textContent = S.tender; location.hash = `process/${encodeURIComponent(result.candidates[0].ocid)}`; return;
+      $('search-feedback').textContent = S.tender; go(`/app/process/${encodeURIComponent(result.candidates[0].ocid)}`); return;
     }
     const message = result.status === 'ambiguous' ? S.choose : S.notFound;
     $('search-feedback').textContent = message;
@@ -831,7 +826,12 @@ $('confirm-decision').onclick = submitDecision;
 document.querySelector('.skip-link').addEventListener('click', event => {
   event.preventDefault(); $('main').focus(); $('main').scrollIntoView();
 });
-window.addEventListener('hashchange', () => { navigate(); window.scrollTo({ top: 0 }); });
+window.addEventListener('popstate', () => navigate());
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[href^="/app"]');
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+  event.preventDefault(); go(link.getAttribute('href'));
+});
 window.addEventListener('pagehide', stopStream);
 $('ask-help').textContent = S.intake;
 $('ask-submit').textContent = S.start;
@@ -880,4 +880,15 @@ initDither();
 hydrateIcons();
 loadPublisher();
 loadRuns();
-navigate();
+const OLD_HASH = { ask: () => '/app', review: id => `/app/review/${id}`, approval: (id, token) => `/app/approvals/${id}${token ? `/${token}` : ''}`, report: id => `/app/reports/${id}`,
+  process: (...ocid) => `/app/process/${ocid.join('/')}`, records: (...ocid) => `/app/records/${ocid.join('/')}`, history: () => '/app/reports', runs: () => '/app/reports',
+  economics: () => '/connect/status', integrations: () => '/connect/status', connectors: sub => sub === 'new' ? '/connect/new' : '/connect', architecture: () => '/connect/architecture' };
+function redirectOldHash() {
+  const [route, ...rest] = location.hash.slice(1).split('/');
+  if (!route || !OLD_HASH[route]) return false;
+  const target = OLD_HASH[route](...rest);
+  if (target.startsWith('/app')) { history.replaceState(null, '', target); return false; }
+  location.replace(target); return true;
+}
+function go(path) { history.pushState(null, '', path); navigate(); window.scrollTo({ top: 0 }); }
+if (!redirectOldHash()) navigate();

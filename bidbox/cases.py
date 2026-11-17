@@ -61,14 +61,19 @@ def candidates(question):
     return search_processes(" ".join(words)[:240], 50)["hits"]
 
 
-def create_case(question, selected):
+def create_case(question, selected, mode=None):
     run_id = "case-" + uuid4().hex[:20]
     state = {"run_id": run_id, "ocid": selected["ocid"], "user_request": question,
-             "step_budget": 6, "steps_used": 0, "limitations": []}
-    save_case(run_id, phase="queued", question=question, ocid=selected["ocid"], state=state, replay=False)
+             "step_budget": 6, "steps_used": 0, "limitations": [], **({"mode": mode} if mode else {})}
+    save_case(run_id, phase="queued", question=question, ocid=selected["ocid"], state=state, replay=False, mode=mode, origin=selected["origin"])
     append_audit_event(run_id, "agent", "state", outputs={"phase": "queued", "summary": "Case accepted for evidence review"}, origin=selected["origin"])
-    append_audit_event(run_id, "agent", "search_awards", {"source": "user intake", "query": question},
-                       {"selected": selected, "summary": "Exact candidate selected; no identifier guessed"}, status="ok", origin=selected["origin"])
+    if mode:
+        append_audit_event(run_id, "agent", "inspect_tender", {"ocid": selected["ocid"], "mode": mode},
+                           {"ocid": selected["ocid"], "title": selected.get("title"), "summary": "Exact process selected by reference; free-text intake skipped"},
+                           status="ok", origin=selected["origin"])
+    else:
+        append_audit_event(run_id, "agent", "search_awards", {"source": "user intake", "query": question},
+                           {"selected": selected, "summary": "Exact candidate selected; no identifier guessed"}, status="ok", origin=selected["origin"])
     submit_case(run_id)
     return run_id
 
@@ -92,6 +97,11 @@ async def execute_case(run_id, filing=False):
                 raise ValueError("Report filing requires approval")
             await filer({**case["state"], **approval})
             phase = "done"
+        elif case.get("mode"):
+            from agent.review_agent import review
+            result = await review(run_id, case["ocid"], case["mode"], case.get("origin") or "live")
+            save_case(run_id, state={**case["state"], **result})
+            phase = "awaiting_approval"
         else:
             await check_model_available()
             graph = build_graph()
@@ -165,7 +175,7 @@ def notify_approver(run_id):
         if health["status"] not in ("live", "sandbox"):
             raise ValueError(health["detail"])
         token = issue_invitation(run_id)
-        result = connector.perform(run_id, "send_approval_link", {"case_id": run_id, "link": f"{base}/app#approval/{run_id}/{token}"})
+        result = connector.perform(run_id, "send_approval_link", {"case_id": run_id, "link": f"{base}/app/approvals/{run_id}/{token}"})
         output = {"connector": name, "status": result.get("status", "unknown"), "result": result}
     except Exception as exc:
         output = {"connector": name or None, "status": "not_configured" if isinstance(exc, ValueError) else "error", "detail": redact(str(exc))}

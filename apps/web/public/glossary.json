@@ -1,0 +1,12 @@
+{
+  "buyer.name": {"label": "Buyer", "meaning": "The public body that is paying for this purchase."},
+  "tender.title": {"label": "What is being bought", "meaning": "The goods, works or services the buyer asked for."},
+  "awards[0].value.amount": {"label": "Value (KES)", "meaning": "The amount the buyer agreed to pay the winning supplier."},
+  "tender.value.amount": {"label": "Estimated value (KES)", "meaning": "What the buyer expected to spend before bids came in."},
+  "tender.procurementMethod": {"label": "Method", "meaning": "How suppliers were invited: open to all, limited to a few, or direct to one."},
+  "date": {"label": "Published", "meaning": "When this version of the record was published on the portal."},
+  "tender.tenderPeriod": {"label": "Tender period", "meaning": "The window during which suppliers could submit bids."},
+  "awards[0].date": {"label": "Award date", "meaning": "When the buyer decided who won."},
+  "awards[0].suppliers": {"label": "Supplier", "meaning": "The company or person chosen to deliver."},
+  "tender.status": {"label": "Status", "meaning": "Where the process stands: planned, active, complete, cancelled or unsuccessful."}
+}
