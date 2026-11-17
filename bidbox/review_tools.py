@@ -161,6 +161,8 @@ def price_check(ocid: str, origin: str = "live") -> dict:
     if amount is None:
         return _cannot("price_check", "Cannot benchmark: award value (awards[].value.amount) is not published.", "process_checks")
     currency = resolve(record, amount_path.replace("amount", "currency"))
+    if not currency:
+        return _cannot("price_check", f"Cannot benchmark: award currency ({amount_path.replace('amount', 'currency')}) is not published, so amounts cannot be compared.", "process_checks")
     classification = _classification(record)
     rows = []
     if classification:
@@ -183,11 +185,14 @@ def price_check(ocid: str, origin: str = "live") -> dict:
                 if buyer_type(buyer) == kind and sum(word in (title or "").lower() for word in keywords) >= needed]
     peers = []
     for peer_ocid, raw in rows:
-        for award in json.loads(raw).get("awards") or []:
-            value = award.get("value") or {}
-            if value.get("amount") is not None and value.get("currency") == currency:
-                peers.append({"ocid": peer_ocid, "amount": float(value["amount"])})
-                break
+        valued = [award for award in json.loads(raw).get("awards") or []
+                  if (award.get("value") or {}).get("amount") is not None and award["value"].get("currency") == currency]
+        if classification:
+            matching = [award for award in valued
+                        if any(str((item.get("classification") or {}).get("id")) == classification[1] for item in award.get("items") or [])]
+            valued = matching or (valued if len(valued) == 1 else [])
+        if valued:
+            peers.append({"ocid": peer_ocid, "amount": float(valued[0]["value"]["amount"])})
     citations = [cite(process, amount_path)] + ([cite(process, classification[0])] if classification else
                 [cite(process, path) for path in ("buyer.name", "tender.title") if present(record, path)])
     if len(peers) < MIN_COMPARABLES:
@@ -233,7 +238,9 @@ def process_checks(ocid: str, origin: str = "live") -> dict:
                              "message": f"{count} tenderer(s) are published for this process.", "citations": [cite(process, "tender.numberOfTenderers")]})
     index = _award_index(record, "value.amount")
     award_path = f"awards[{index}].value.amount" if index is not None else None
-    if award_path and present(record, award_path) and present(record, "tender.value.amount"):
+    award_currency = resolve(record, award_path.replace("amount", "currency")) if award_path else None
+    if (award_path and present(record, award_path) and present(record, "tender.value.amount")
+            and award_currency and award_currency == resolve(record, "tender.value.currency")):
         award, tender = float(resolve(record, award_path)), float(resolve(record, "tender.value.amount"))
         if tender:
             ratio = round(award / tender, 2)
