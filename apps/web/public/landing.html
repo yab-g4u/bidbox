@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BidBox - a first look at every contract award</title>
+<title>BidBox · A first look at every contract award</title>
 <link rel="stylesheet" href="/landing.css">
 <script src="/landing.js" defer></script>
 </head><body>
@@ -9,19 +9,19 @@
   <a class="landing-brand" href="/">bidbox</a>
   <div class="landing-toplinks">
     <a href="#how">How it works</a>
-    <a href="#integrations">Integrations</a>
-    <a href="/connectors">Connectors</a>
-    <a href="/app" class="top-cta">Audit Officer Workspace</a>
+    <a href="/developers">Developer docs</a>
+    <a href="/connect">Connect your system</a>
+    <a href="/app" class="top-cta">Open live demo</a>
   </div>
 </div>
-<nav id="nav" aria-label="Page"><a href="#how">How it works</a><a href="#integrations">Integrations</a><a href="#trust">Trust</a><a href="#faq">FAQ</a><a href="#pilot">Pilot</a><a href="/connectors">Connectors</a><a class="o" href="/app" title="Live Audit Officer Workspace">Audit Officer Workspace</a></nav>
+<nav id="nav" aria-label="Page"><a href="#how">How it works</a><a href="#integrations">Integrations</a><a href="#trust">Trust</a><a href="#faq">FAQ</a><a href="#pilot">Pilot</a><a href="/developers">Developer docs</a><a href="/connect">Connect your system</a><a class="o" href="/app">Open live demo</a></nav>
 
 <header id="hero"><div class="banner" aria-hidden="true"><canvas data-seed="3" data-h="300"></canvas>
 <svg id="stars" preserveAspectRatio="none" viewBox="0 0 1000 300" fill="none" stroke="#EAF2FF" stroke-opacity=".5" stroke-width=".8"><polyline points="60,70 190,130 330,60 470,150 610,80 760,140 930,60" vector-effect="non-scaling-stroke"/><polyline points="190,130 250,230 470,150" vector-effect="non-scaling-stroke"/><polyline points="760,140 830,230 930,60" vector-effect="non-scaling-stroke"/>
 <g fill="#fff" stroke="none"><path d="M60 64l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><path d="M470 143l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/><path d="M930 53l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/><circle cx="190" cy="130" r="2.5"/><circle cx="330" cy="60" r="2.5"/><circle cx="610" cy="80" r="2.5"/><circle cx="760" cy="140" r="2.5"/><circle cx="250" cy="230" r="2"/><circle cx="830" cy="230" r="2"/></g></svg></div>
 <div class="hw rv"><h1>Give every contract award a first look.<em>A person makes the final call.</em></h1>
 <p class="sub">BidBox finds an award in public procurement data, compares it with similar awards, and prepares a review file with sources. Nothing is filed until a named person approves.</p>
-<div class="row"><a class="btn" href="/app">Audit Officer Workspace <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="btn sec" href="/connectors">View connectors <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="lnk" href="#pilot">Join the pilot list <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
+<div class="row"><a class="btn" href="/app">Open live demo <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="btn sec" href="/connect">Connect your system <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="btn sec" href="/developers">Developer docs <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
 <div id="badge" role="status"></div></div></header>
 
 <section id="how"><h2 class="rv">From question to review file.<em>In plain words.</em></h2>
@@ -33,14 +33,13 @@
 
 <section><h2 class="rv">See it work.</h2>
 <div class="card frame rv"><div class="bar"><i></i><i></i><i></i><div class="tabs" role="tablist" aria-label="Application screenshots" id="st"></div></div><div class="shot" id="shot" role="tabpanel"></div>
-<div class="cap"><span>Recorded run</span><a class="lnk" href="/app#history">Open the audit log <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></section>
+<div class="cap"><span>Recorded run</span><a class="lnk" href="/app/reports">Open review files <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></section>
 
 <section id="integrations"><h2 class="rv">Plug into the systems you already run.<em>A folder and a config file.</em></h2>
 <div class="two"><p class="sticky rv">A connector is a folder with a manifest. Point BidBox at a source, say which fields matter, and keep secrets out of the file. Every result carries a label showing whether it came from live or sandbox data.</p>
 <div id="steps"></div></div>
-<div class="term rv"><div class="bar"><div class="tabs" role="tablist" aria-label="Connector example" id="tt"></div><button class="cp" id="cp">Copy</button></div><pre id="tp" role="tabpanel" aria-live="off"></pre></div>
 <div class="chips" id="chips"></div>
-<div class="conn-cta rv"><p>See every installed connector, test its connection live, and add new data sources — no code change needed in the agent.</p><a class="btn" href="/connectors">Open connectors gallery <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></section>
+<div class="conn-cta rv"><p>See every installed connector, test its connection live, and add new data sources — no code change needed in the agent.</p><a class="btn" href="/connect">Connect your system <svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></section>
 
 <section id="trust"><h2 class="rv">People stay in charge.</h2>
 <div class="feat rv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><div><h3>Approval enforced inside the tool</h3><p>Filing is blocked in the tool itself until a named person signs off.</p></div></div>
@@ -63,5 +62,5 @@
 <form id="f" class="rv"><input type="text" name="name" placeholder="Name" aria-label="Name" required autocomplete="name"><input type="text" name="institution" placeholder="Institution" aria-label="Institution" required><input type="text" name="role" placeholder="Role" aria-label="Role" required><input type="email" name="email" placeholder="Email" aria-label="Email" required autocomplete="email">
 <label class="c"><input type="checkbox" name="consent" required> I agree to be contacted about the BidBox pilot.</label><button class="btn" type="submit">Send</button><div id="msg" role="status"></div></form></section>
 
-<footer>(c) 2026 BidBox <a href="/app">Audit Officer Workspace</a><a href="/app#history">Audit log</a><a href="/connectors">Connectors</a></footer>
+<footer>(c) 2026 BidBox <a href="/app">Open live demo</a><a href="/connect">Connect your system</a><a href="/developers">Developer docs</a></footer>
 </body></html>
