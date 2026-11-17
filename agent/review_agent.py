@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import time
 from typing import Any
@@ -80,12 +81,18 @@ async def write_brief(run_id: str, process: dict, outputs: list[dict]) -> tuple[
     return str(response.get("brief") or ""), findings, []
 
 
+def award_id_for(path: str, record: dict) -> str:
+    match = re.match(r"awards\[(\d+)\]", path or "")
+    awards = record.get("awards") or []
+    index = int(match.group(1)) if match else 0
+    return str((awards[index] if index < len(awards) else {}).get("id") or "not published")
+
+
 def to_filed(finding: dict, process: dict) -> dict:
-    award_id = str(((process["record"].get("awards") or [{}])[0]).get("id") or "not published")
     return {**finding, "rationale": "; ".join(f"{c['field_path']} = {json.dumps(c['value'], default=str)[:120]}" for c in finding["citations"]),
             "uncertainty": "Based on downloaded records only; coverage is not independently established.",
             "follow_up": "Committee should check the cited fields against the source portal.",
-            "sources": [{"ocid": c["ocid"], "award_id": award_id, "field_path": c["field_path"], "source_url": c.get("source_url") or ""} for c in finding["citations"]]}
+            "sources": [{"ocid": c["ocid"], "award_id": award_id_for(c["field_path"], process["record"]), "field_path": c["field_path"], "source_url": c.get("source_url") or ""} for c in finding["citations"]]}
 
 
 async def review(run_id: str, ocid: str, mode: str, origin: str = "live") -> dict[str, Any]:
