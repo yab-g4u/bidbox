@@ -100,6 +100,8 @@ def supplier_history(ocid: str, origin: str = "live") -> dict:
     supplier = suppliers[0]
     supplier_id, supplier_name = supplier.get("id"), supplier.get("name")
     needles = [json.dumps(value, ensure_ascii=False)[1:-1] for value in (supplier_name, supplier_id) if value]
+    if not needles:
+        return _cannot("supplier_history", f"The supplier on {path} has no published name or id.", "process_checks")
     rows = _rows("SELECT ocid, buyer_name, raw_json FROM procurement_records WHERE origin = ? AND award_count > 0 AND ("
                  + " OR ".join(["contains(raw_json, ?)"] * len(needles)) + ")", [origin, *needles])
     awards, buyers, dates, totals = [], {}, [], {}
