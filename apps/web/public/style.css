@@ -281,3 +281,8 @@ select { width: 100%; min-height: 48px; color: var(--text); background: var(--su
   *, *::before, *::after { transition: none !important; }
   .spinner { animation-duration: 2s; }
 }
+
+.plain-meaning { display: block; color: var(--muted); font-weight: 400; font-size: 12px; margin-top: 4px; }
+.what-is { border: 0; background: none; color: var(--accent); cursor: help; font-size: 12px; margin-left: 6px; padding: 0; }
+.not-published { color: var(--muted); font-style: italic; }
+.raw-ocds { margin-top: 16px; } .raw-ocds pre { overflow: auto; max-height: 420px; font-size: 12px; }

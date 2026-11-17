@@ -221,6 +221,7 @@ function renderProcess(process) {
   });
   if (!awards.length) wrap.append(node('p', 'card helper', 'No awards are published in this selected release. This remains a tender-stage contract process; no award has been assumed.'));
   const sourceCard = $('process-source'); sourceCard.replaceChildren(sourceLinks([{source_url: process.source_url, ocid: process.ocid, field_path: 'Selected downloaded release'}], {origin: process.origin}));
+  sourceCard.append(routeLink('Plain-language record view', `#records/${encodeURIComponent(process.ocid)}`, 'button secondary full-width', 'file'));
   const snapshot = routeLink('View downloaded OCDS record', `/api/data/process?ocid=${encodeURIComponent(process.ocid)}`, 'button secondary full-width', 'code'); snapshot.target = '_blank'; snapshot.rel = 'noopener noreferrer'; sourceCard.append(snapshot);
   sourceCard.append(node('p', 'helper', `Source publication: ${stamp(process.source_publication_date)} · Ingested: ${stamp(process.ingested_at)}. This is an archived download, not a fresh portal check.`));
   if (awards.length && !awards.some(award => award.items?.length)) sourceCard.append(node('p', 'helper', 'Award item classifications are not reported. No price comparables or benchmark has been invented.'));
@@ -234,6 +235,36 @@ function renderProcess(process) {
     });
     sourceCard.append(choices);
   }
+}
+let glossary = null;
+function ocdsValue(record, path) {
+  return path.split(/\.|\[(\d+)\]/).filter(Boolean).reduce((value, key) => value == null ? undefined : value[/^\d+$/.test(key) ? Number(key) : key], record);
+}
+async function renderRecord(process) {
+  glossary = glossary || await api('/glossary.json');
+  const record = process.record, award = (record.awards || [])[0] || {};
+  $('record-badges').replaceChildren(chip(process.origin === 'sandbox' ? 'SANDBOX' : 'LIVE DATA · downloaded PPIP', '', 'link'));
+  $('record-title').textContent = process.title || 'Title not published';
+  $('record-reference').textContent = process.ocid;
+  const period = record.tender?.tenderPeriod;
+  const values = {
+    'buyer.name': record.buyer?.name, 'tender.title': record.tender?.title || award.title,
+    'awards[0].value.amount': award.value?.amount == null ? null : amount(award.value.amount, award.value.currency),
+    'tender.procurementMethod': record.tender?.procurementMethod, 'date': record.date || process.release_date,
+    'tender.tenderPeriod': period?.startDate || period?.endDate ? `${period.startDate || 'Not published'} → ${period.endDate || 'Not published'}` : null,
+    'awards[0].date': award.date, 'awards[0].suppliers': (award.suppliers || []).map(s => s.name || s.id).filter(Boolean).join(', ') || null,
+    'tender.status': record.tender?.status || award.status,
+  };
+  const table = node('table', 'data-table'), body = node('tbody');
+  Object.entries(values).forEach(([path, value]) => {
+    const entry = glossary[path] || { label: path, meaning: '' }, row = node('tr'), heading = node('th'); heading.scope = 'row';
+    const help = node('button', 'what-is', 'What is this?'); help.type = 'button'; help.title = `${entry.meaning} OCDS field: ${path}`; help.setAttribute('aria-label', `What is ${entry.label}? ${entry.meaning}`);
+    heading.append(node('span', '', entry.label), help, node('span', 'plain-meaning', entry.meaning));
+    const cell = value == null || value === '' ? node('td', 'not-published', 'Not published') : node('td', '', String(value));
+    row.append(heading, cell); body.append(row);
+  });
+  table.append(body); $('record-fields').replaceChildren(table);
+  $('record-raw').textContent = JSON.stringify(record, null, 2);
 }
 function renderCases() {
   const list = $('cases'); list.replaceChildren();
@@ -286,7 +317,7 @@ function setView(nextScreen) {
   screen = nextScreen;
   document.querySelectorAll('[data-screen]').forEach(section => section.hidden = section.dataset.screen !== screen);
   document.querySelectorAll('[data-nav]').forEach(link => {
-    if (link.dataset.nav === (['review', 'report', 'approval', 'process'].includes(screen) ? 'ask' : screen)) link.setAttribute('aria-current', 'page');
+    if (link.dataset.nav === (['review', 'report', 'approval', 'process', 'record'].includes(screen) ? 'ask' : screen)) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   $('main-nav').hidden = screen === 'approval'; $('approval-header').hidden = screen !== 'approval';
@@ -658,9 +689,9 @@ async function navigate() {
   const version = ++routeVersion;
   let parts; try { parts = (location.hash.slice(1) || 'ask').split('/').map(decodeURIComponent); } catch (_) { parts = ['ask']; }
   if (!location.hash && location.pathname === '/architecture') parts = ['architecture'];
-  const view = ['ask', 'process', 'review', 'approval', 'report', 'economics', 'integrations', 'architecture', 'history'].includes(parts[0]) ? parts[0] : 'ask';
+  const view = ['ask', 'process', 'records', 'review', 'approval', 'report', 'economics', 'integrations', 'architecture', 'history'].includes(parts[0]) ? parts[0] : 'ask';
   invitationToken = view === 'approval' ? parts[2] || null : null;
-  const id = ['process', 'review', 'approval', 'report', 'economics'].includes(view) ? parts[1] || null : null;
+  const id = ['process', 'records', 'review', 'approval', 'report', 'economics'].includes(view) ? parts[1] || null : null;
   const changed = current !== id;
   if (changed) {
     stopStream(); current = id; data = null; pendingDecision = null;
@@ -673,6 +704,14 @@ async function navigate() {
   if (view === 'architecture') { await renderArchitecture(); return; }
   if (view === 'integrations') { await renderIntegrations(); return; }
   if (view === 'economics' && !id) { renderEconomicsPicker(); return; }
+  if (view === 'records') {
+    try {
+      const process = await api(`/api/data/process?ocid=${encodeURIComponent(id || '')}`);
+      if (version !== routeVersion) return;
+      setView('record'); await renderRecord(process); document.title = `${process.title || process.ocid} · BidBox`;
+    } catch (error) { if (version === routeVersion) { $('record-screen').hidden = true; notice(error.message, 'review'); } }
+    return;
+  }
   if (view === 'process') {
     data = null; $('main').setAttribute('aria-busy', 'true'); notice('Opening downloaded publisher evidence…');
     try {
