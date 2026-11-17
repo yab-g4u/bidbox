@@ -175,7 +175,7 @@ def notify_approver(run_id):
         if health["status"] not in ("live", "sandbox"):
             raise ValueError(health["detail"])
         token = issue_invitation(run_id)
-        result = connector.perform(run_id, "send_approval_link", {"case_id": run_id, "link": f"{base}/app#approval/{run_id}/{token}"})
+        result = connector.perform(run_id, "send_approval_link", {"case_id": run_id, "link": f"{base}/app/approvals/{run_id}/{token}"})
         output = {"connector": name, "status": result.get("status", "unknown"), "result": result}
     except Exception as exc:
         output = {"connector": name or None, "status": "not_configured" if isinstance(exc, ValueError) else "error", "detail": redact(str(exc))}
