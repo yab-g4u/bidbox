@@ -694,7 +694,7 @@ function setWorkspaceView(value) {
 }
 async function navigate() {
   const version = ++routeVersion;
-  const target = (location.hash.slice(1) || 'ask').split('/')[0];
+  const target = location.hash ? location.hash.slice(1).split('/')[0] : location.pathname === '/architecture' ? 'architecture' : 'ask';
   if (INTEGRATOR_VIEWS.includes(target) && workspaceView() !== 'integrator') { location.hash = 'ask'; return; }
   let parts; try { parts = (location.hash.slice(1) || 'ask').split('/').map(decodeURIComponent); } catch (_) { parts = ['ask']; }
   if (!location.hash && location.pathname === '/architecture') parts = ['architecture'];
